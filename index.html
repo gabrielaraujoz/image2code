@@ -225,8 +225,11 @@ function timeline(s) {
 }
 
 
+// Design time per sample, estimated from the trajectories and the platform timer (review time not included).
+const TIME = { moraine: '~15–20 h', bamboo: '~15 h', lighthouse: '~15.5 h' };
+
 function renderOverview() {
-  const rows = SAMPLES.map(s => `<tr><td><a class="row" href="#${s.id}">${esc(s.name)}</a></td><td class="mono">${score(s.rubric, 'm')}</td><td class="mono">${score(s.rubric, 'r')}</td><td class="mono">${s.round_count}</td></tr>`).join('');
+  const rows = SAMPLES.map(s => `<tr><td><a class="row" href="#${s.id}">${esc(s.name)}</a></td><td class="mono">${score(s.rubric, 'm')}</td><td class="mono">${score(s.rubric, 'r')}</td><td class="mono">${s.round_count}</td><td class="mono">${TIME[s.id] || '–'}</td></tr>`).join('');
   page.innerHTML = `
     <h1>Overview</h1>
     <p class="lead">These are Image2Code samples created by senior designers. Each one recreates a real photo as a photorealistic 3D scene that runs in the browser.</p>
@@ -234,13 +237,14 @@ function renderOverview() {
     <ol class="steps">
       <li><h3>Start from a photo</h3><p>Each sample started with a reference photo and the model's answer to it, from Gemini 4 Argon.</p></li>
       <li><h3>Rate the model answer</h3><p>The designer scored the model's answer against the rubric.</p></li>
-      <li><h3>Recreate the photo</h3><p>The designer worked with their LLM to rebuild the scene in Blender and HTML, in three stages: modelling, texturing and adding motion effects such as water, wind and snow.</p></li>
+      <li><h3>Build the scene in Blender</h3><p>Working with their LLM, the designer first got the scene right in Blender, in three stages: modelling, texturing and adding motion effects such as water, wind and snow.</p></li>
+      <li><h3>Transpose it to HTML</h3><p>Once the Blender scene was right, it was transposed to HTML so it runs in the browser.</p></li>
       <li><h3>Review</h3><p>At every submission, another senior designer reviewed the work and sent feedback. If it wasn't there yet, the task went back for another round.</p></li>
     </ol>
     <h2>Results</h2>
     <div class="results">
-      <p>Each sample went through 3 review rounds before approval. The redesigns passed every rubric criterion, against 13 to 18 for Gemini.</p>
-      <div class="scroll"><table class="tbl"><thead><tr><th>Sample</th><th>Model</th><th>Redesign</th><th>Review rounds</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p>Each sample went through 3 review rounds before approval. The redesigns passed every rubric criterion, against 13 to 18 for Gemini. Each sample took about 15 hours of design time, estimated from the trajectories and the platform's timer.</p>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Sample</th><th>Model</th><th>Redesign</th><th>Review rounds</th><th>Design time (est.)</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
   window.scrollTo(0, 0);
 }
