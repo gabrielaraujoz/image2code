@@ -236,6 +236,27 @@ function timeline(s) {
 // Design time per sample, estimated from the trajectories and the platform timer (review time not included).
 const TIME = { moraine: '~15–20 h', bamboo: '~15 h', lighthouse: '~15.5 h' };
 
+
+const CATS = [
+  ['Builds', 'The scene opens in the browser and runs at 30 fps or more.', true],
+  ['Orbit', 'The camera orbits the scene and can\'t go below the ground or outside it.', true],
+  ['Prompt Adherence', 'No UI or interaction besides orbiting, and motion runs on load.'],
+  ['Reference Fidelity', 'The scene matches the photo: colours, landmarks, light and time of day.'],
+  ['Scene Fidelity', 'Shapes read as real (rock, trees, buildings), with no holes or edges when orbiting.'],
+  ['Lighting', 'Light direction, shadows, haze and exposure look natural.'],
+  ['Materials', 'Surfaces read as the real thing: water, rock, snow, paint, glass.'],
+  ['Composition', 'The opening view matches the photo\'s framing, with a level horizon.'],
+  ['Motion', 'Wind, water and snow move at real-world speed and loop without jumps.'],
+  ['Realism', 'Common giveaways of CG (tiling, cloned objects, clipping), and whether a paused frame could pass for the photo.']
+];
+function rubricCats() {
+  return CATS.map(([cat, what, gate]) => {
+    const counts = SAMPLES.map(s => s.rubric.filter(r => r.d === cat).length);
+    const n = Math.min(...counts) === Math.max(...counts) ? String(counts[0]) : `${Math.min(...counts)}–${Math.max(...counts)}`;
+    return `<tr class="${gate ? 'gate' : cat === 'Realism' ? 'real' : ''}"><td>${esc(cat)}${gate ? ' <span class="label">· gate</span>' : ''}</td><td>${esc(what)}</td><td class="mono">${n}</td></tr>`;
+  }).join('');
+}
+
 function renderOverview() {
   const rows = SAMPLES.map(s => `<tr><td><a class="row" href="#${s.id}">${esc(s.name)}</a></td><td class="mono">${score(s.rubric, 'm')}</td><td class="mono">${score(s.rubric, 'r')}</td><td class="mono">${s.round_count}</td><td class="mono">${TIME[s.id] || '–'}</td></tr>`).join('');
   page.innerHTML = `
@@ -247,10 +268,15 @@ function renderOverview() {
     <ol class="steps">
       <li><h3>Start from a photo</h3><p>Each sample started with a reference photo and the model's answer to it, from Gemini 4 Argon.</p></li>
       <li><h3>Rate the model answer</h3><p>The designer scored the model's answer against the rubric.</p></li>
-      <li><h3>Build the scene in Blender</h3><p>Working with their LLM, the designer first got the scene right in Blender, in three stages: modelling, texturing and adding motion effects such as water, wind and snow.</p></li>
+      <li><h3>Build the scene in Blender</h3><p>Working with Claude Opus 5.5, used on all three samples, the designer first got the scene right in Blender, in three stages: modelling, texturing and adding motion effects such as water, wind and snow.</p></li>
       <li><h3>Transpose it to HTML</h3><p>Once the Blender scene was right, it was transposed to HTML so it runs in the browser.</p></li>
       <li><h3>Review</h3><p>At every submission, another senior designer reviewed the work and sent feedback. If it wasn't there yet, the task went back for another round.</p></li>
     </ol>
+    <h2>Rubrics</h2>
+    <div class="results">
+      <p>Each criterion is scored pass or fail, on both Gemini's answer and the redesign. Gate criteria must pass, or the task goes back for rework. Each sample has 32 to 33 criteria, written for its photo.</p>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Category</th><th>What it checks</th><th>Criteria</th></tr></thead><tbody>${rubricCats()}</tbody></table></div>
+    </div>
     <h2>Results</h2>
     <div class="results">
       <p>Each sample went through 3 review rounds before approval. The redesigns passed every rubric criterion, against 13 to 18 for Gemini. Each sample took about 15 hours of design time, estimated from the trajectories and the platform's timer.</p>
