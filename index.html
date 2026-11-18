@@ -241,7 +241,8 @@ function renderOverview() {
   page.innerHTML = `
     <h1>Overview</h1>
     <p class="lead">These are Image2Code samples created by senior designers. Each one recreates a real photo as a photorealistic 3D scene that runs in the browser.</p>
-    <div class="refs">${SAMPLES.map(s => `<a href="#${s.id}"><img src="${esc(s.thumb)}" alt="Reference photo: ${esc(s.name)}" loading="lazy"><span class="label">${esc(s.name)}</span></a>`).join('')}</div>
+    <p class="label" style="margin:24px 0 0">Reference images</p>
+    <div class="refs" style="margin-top:10px">${SAMPLES.map(s => `<a href="#${s.id}"><img src="${esc(s.thumb)}" alt="Reference photo: ${esc(s.name)}" loading="lazy"><span class="label">${esc(s.name)}</span></a>`).join('')}</div>
     <h2>How they were made</h2>
     <ol class="steps">
       <li><h3>Start from a photo</h3><p>Each sample started with a reference photo and the model's answer to it, from Gemini 4 Argon.</p></li>
