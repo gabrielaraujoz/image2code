@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moraine Lake &amp; Valley of the Ten Peaks — Live 3D Scene</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0b242c;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+    canvas:active {
+      cursor: grabbing;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================================
+// 1. RENDERER, SCENE, CAMERA & ORBIT CONTROLS (MATCHED TO REFERENCE FRAMING)
+// ============================================================================
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+// Reference camera parameters calibrated to the Moraine Lake sunrise viewpoint
+const REF_CAM_POS = new THREE.Vector3(0.0, 14.0, 145.0);
+const REF_CAM_TARGET = new THREE.Vector3(0.0, 22.8, -60.0);
+const REF_FOV = 36.0;
+const REF_ASPECT = 2000.0 / 1333.0; // 1.500375 exact photo aspect ratio
+
+const camera = new THREE.PerspectiveCamera(
+  REF_FOV,
+  window.innerWidth / window.innerHeight,
+  0.5,
+  2500.0
+);
+camera.position.copy(REF_CAM_POS);
+camera.lookAt(REF_CAM_TARGET);
+
+// Reference camera matrix for exact 3D-to-photo UV calibration
+const refCamera = new THREE.PerspectiveCamera(REF_FOV, REF_ASPECT, 0.5, 2500.0);
+refCamera.position.copy(REF_CAM_POS);
+refCamera.lookAt(REF_CAM_TARGET);
+refCamera.updateMatrixWorld(true);
+refCamera.updateProjectionMatrix();
+const refViewProjMatrix = new THREE.Matrix4().multiplyMatrices(
+  refCamera.projectionMatrix,
+  refCamera.matrixWorldInverse
+);
+
+// Adjust vertical FOV subtly when window aspect differs from 3:2 so the framing matches
+function updateCameraFovForAspect() {
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
+  if (aspect < REF_ASPECT) {
+    // Keep horizontal FOV consistent on narrower viewports
+    const radH = 2.0 * Math.atan(Math.tan(THREE.MathUtils.degToRad(REF_FOV) * 0.5) * REF_ASPECT);
+    const radV = 2.0 * Math.atan(Math.tan(radH * 0.5) / aspect);
+    camera.fov = THREE.MathUtils.radToDeg(radV);
+  } else {
+    camera.fov = REF_FOV;
+  }
+  camera.updateProjectionMatrix();
+}
+updateCameraFovForAspect();
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(REF_CAM_TARGET);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.rotateSpeed = 0.55;
+controls.zoomSpeed = 0.75;
+controls.panSpeed = 0.5;
+controls.minDistance = 25.0;
+controls.maxDistance = 320.0;
+controls.minPolarAngle = Math.PI * 0.22;
+controls.maxPolarAngle = Math.PI * 0.492; // Stay above lake surface (y > 1.5)
+controls.maxAzimuthAngle = Math.PI * 0.38;
+controls.minAzimuthAngle = -Math.PI * 0.38;
+controls.update();
+
+// ============================================================================
+// 2. PLANAR MIRROR REFLECTION RENDER TARGET & OPTIONAL REFERENCE TEXTURE
+// ============================================================================
+const reflWidth = Math.min(2048, Math.floor(window.innerWidth * Math.min(window.devicePixelRatio, 2)));
+const reflHeight = Math.min(2048, Math.floor(window.innerHeight * Math.min(window.devicePixelRatio, 2)));
+const reflectionRT = new THREE.WebGLRenderTarget(reflWidth, reflHeight, {
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  format: THREE.RGBAFormat,
+  depthBuffer: true
+});
+const reflectionCamera = camera.clone();
+
+// Create a fallback 1x1 texture; if reference.jpg is accessible over HTTP/same-origin,
+// load it smoothly to enrich the 3D terrain & sky relief while keeping full 3D shaders.
+const fallbackData = new Uint8Array([180, 150, 145, 255]);
+const fallbackTex = new THREE.DataTexture(fallbackData, 1, 1, THREE.RGBAFormat);
+fallbackTex.needsUpdate = true;
+
+const sharedUniforms = {
+  uTime: { value: 0.0 },
+  uRefTex: { value: fallbackTex },
+  uHasRefTex: { value: 0.0 },
+  uRefViewProj: { value: refViewProjMatrix },
+  uRefCamPos: { value: REF_CAM_POS.clone() },
+  uCamPos: { value: camera.position.clone() },
+  uIsReflection: { value: 0.0 }
+};
+
+const texLoader = new THREE.TextureLoader();
+texLoader.setCrossOrigin('anonymous');
+texLoader.load(
+  './reference.jpg',
+  (tex) => {
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    sharedUniforms.uRefTex.value = tex;
+    sharedUniforms.uHasRefTex.value = 1.0;
+  },
+  undefined,
+  () => {
+    // Graceful fallback to 100% procedural shaders if file:// blocks texture load
+    sharedUniforms.uHasRefTex.value = 0.0;
+  }
+);
+
+// ============================================================================
+// 3. EXACT SILHOUETTE & ELEVATION CURVE HELPERS (JS + GLSL SHARED LOGIC)
+// ============================================================================
+function samplePiecewise(u, pts) {
+  if (u <= pts[0][0]) return pts[0][1];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const u0 = pts[i][0], v0 = pts[i][1];
+    const u1 = pts[i + 1][0], v1 = pts[i + 1][1];
+    if (u <= u1) {
+      const t = (u - u0) / Math.max(1e-6, u1 - u0);
+      const s = t * t * (3.0 - 2.0 * t);
+      return THREE.MathUtils.lerp(v0, v1, THREE.MathUtils.lerp(t, s, 0.35));
+    }
+  }
+  return pts[pts.length - 1][1];
+}
+
+// Ten Peaks skyline curve in normalized reference coordinates (u in [0,1], v in [0,1] from bottom)
+const PEAKS_SILHOUETTE_PTS = [
+  [0.000, 0.800], [0.195, 0.802], [0.214, 0.830], [0.228, 0.838],
+  [0.246, 0.824], [0.265, 0.833], [0.285, 0.838], [0.305, 0.861],
+  [0.320, 0.873], [0.336, 0.878], [0.354, 0.870], [0.368, 0.858],
+  [0.388, 0.820], [0.408, 0.774], [0.422, 0.796], [0.442, 0.806],
+  [0.456, 0.793], [0.474, 0.803], [0.498, 0.752], [0.518, 0.728],
+  [0.535, 0.745], [0.553, 0.758], [0.578, 0.725], [0.595, 0.728],
+  [0.622, 0.756], [0.647, 0.718], [0.680, 0.735], [0.720, 0.758],
+  [0.755, 0.778], [0.792, 0.796], [0.815, 0.782], [0.838, 0.738],
+  [0.855, 0.718], [0.878, 0.748], [0.916, 0.785], [0.945, 0.775],
+  [0.975, 0.758], [1.000, 0.742]
+];
+
+// Left dark cliff (Tower of Babel massif) silhouette curve
+const LEFT_CLIFF_PTS = [
+  [0.000, 1.035], [0.088, 1.002], [0.125, 0.940], [0.165, 0.865],
+  [0.205, 0.780], [0.245, 0.705], [0.285, 0.620], [0.325, 0.550],
+  [0.365, 0.502], [0.415, 0.462], [0.460, 0.442], [1.000, 0.430]
+];
+
+// Conifer forest top canopy profile
+const FOREST_TOP_PTS = [
+  [0.000, 0.420], [0.320, 0.555], [0.365, 0.505], [0.415, 0.465],
+  [0.465, 0.448], [0.505, 0.452], [0.542, 0.495], [0.578, 0.506],
+  [0.605, 0.492], [0.635, 0.495], [0.680, 0.512], [0.740, 0.532],
+  [0.810, 0.552], [0.880, 0.572], [0.945, 0.592], [1.000, 0.604]
+];
+
+// Shoreline curve in reference screen space
+const SHORELINE_PTS = [
+  [0.000, 0.365], [0.080, 0.388], [0.168, 0.415], [0.270, 0.426],
+  [0.355, 0.436], [0.480, 0.440], [0.585, 0.438], [0.596, 0.418],
+  [0.670, 0.402], [0.780, 0.388], [0.890, 0.372], [1.000, 0.356]
+];
+
+// Convert reference screen (u, v) + world depth z into exact 3D world (x, y, z)
+const invRefViewProj = refViewProjMatrix.clone().invert();
+function refUVZToWorld(u, v, worldZ) {
+  const ndcX = u * 2.0 - 1.0;
+  const ndcY = v * 2.0 - 1.0;
+  const pNear = new THREE.Vector3(ndcX, ndcY, -1.0).applyMatrix4(invRefViewProj);
+  const pFar = new THREE.Vector3(ndcX, ndcY, 1.0).applyMatrix4(invRefViewProj);
+  const dir = pFar.sub(pNear);
+  const t = (worldZ - REF_CAM_POS.z) / dir.z;
+  return new THREE.Vector3(
+    REF_CAM_POS.x + dir.x * t,
+    REF_CAM_POS.y + dir.y * t,
+    worldZ
+  );
+}
+
+// Common GLSL noise and projection library shared across shaders
+const COMMON_GLSL = /* glsl */ `
+  uniform float uTime;
+  uniform sampler2D uRefTex;
+  uniform float uHasRefTex;
+  uniform mat4 uRefViewProj;
+  uniform vec3 uRefCamPos;
+  uniform vec3 uCamPos;
+  uniform float uIsReflection;
+
+  float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+
+  float noise2D(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  float fbm4(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+    for (int i = 0; i < 4; i++) {
+      v += a * noise2D(p);
+      p = rot * p * 2.03 + vec2(17.1, 31.7);
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  float fbm6(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+    for (int i = 0; i < 6; i++) {
+      v += a * noise2D(p);
+      p = rot * p * 2.02 + vec2(13.4, 29.1);
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  vec2 worldToRefUV(vec3 worldPos) {
+    vec4 clip = uRefViewProj * vec4(worldPos, 1.0);
+    vec2 ndc = clip.xy / max(0.0001, clip.w);
+    return ndc * 0.5 + 0.5;
+  }
+`;
+
+// ============================================================================
+// 4. SKY DOME & ANIMATED ALPENGLOW DAWN CLOUDS (PART 2)
+// ============================================================================
+const skyGeo = new THREE.SphereGeometry(1400, 96, 64);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms
+  },
+  side: THREE.BackSide,
+  depthWrite: false,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec3 vWorldPos;
+    varying vec3 vDir;
+    void main() {
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      vDir = normalize(wp.xyz - uRefCamPos);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec3 vWorldPos;
+    varying vec3 vDir;
+
+    vec3 computeProceduralSky(vec2 uv, vec3 dir, float t) {
+      // Base dawn sky gradient: cool slate-blue on left to warm dusty rose-lavender on right
+      float u = clamp(uv.x, 0.0, 1.0);
+      float v = clamp(uv.y, 0.40, 1.0);
+      float vNorm = clamp((v - 0.70) / 0.30, 0.0, 1.0);
+
+      vec3 leftTop = vec3(0.545, 0.635, 0.705);
+      vec3 leftLow = vec3(0.745, 0.788, 0.824);
+      vec3 midTop  = vec3(0.796, 0.678, 0.686);
+      vec3 midLow  = vec3(0.910, 0.706, 0.643);
+      vec3 rightTop = vec3(0.647, 0.514, 0.553);
+      vec3 rightLow = vec3(0.780, 0.675, 0.710);
+
+      vec3 colLeft  = mix(leftLow, leftTop, smoothstep(0.0, 1.0, vNorm));
+      vec3 colMid   = mix(midLow, midTop, smoothstep(0.0, 1.0, vNorm));
+      vec3 colRight = mix(rightLow, rightTop, smoothstep(0.0, 1.0, vNorm));
+
+      vec3 baseSky = mix(colLeft, colMid, smoothstep(0.15, 0.58, u));
+      baseSky = mix(baseSky, colRight, smoothstep(0.68, 0.98, u));
+
+      // Slow continuous wind drift for cloud layers
+      vec2 wind1 = vec2(-t * 0.0028, t * 0.0004);
+      vec2 wind2 = vec2(-t * 0.0045, -t * 0.0006);
+
+      vec2 cloudCoord = vec2(u * 3.2, v * 5.5);
+      float n1 = fbm6(cloudCoord + wind1);
+      float n2 = fbm4(cloudCoord * 2.1 + wind2 + vec2(4.2, 1.9));
+      float cloudWave = mix(n1, n2, 0.38);
+
+      // Left-side wispy dawn clouds (cool mauve-grey wisps seen at u=0.10..0.26, v=0.84..0.98)
+      float leftCloudMask = exp(-pow((u - 0.17) / 0.09, 2.0)) * smoothstep(0.80, 0.94, v);
+      float leftWisps = smoothstep(0.38, 0.72, fbm4(cloudCoord * 2.6 + wind2));
+      vec3 leftCloudCol = vec3(0.64, 0.57, 0.59);
+      baseSky = mix(baseSky, leftCloudCol, leftCloudMask * leftWisps * 0.65);
+
+      // Main glowing peach/coral sunrise cloud bank (u=0.45..0.95, v=0.73..0.95)
+      float bankCenterV = mix(0.86, 0.81, smoothstep(0.45, 0.90, u));
+      float bankEnvU = smoothstep(0.32, 0.58, u) * (1.0 - 0.65 * smoothstep(0.90, 1.02, u));
+      float bankEnvV = exp(-pow((v - bankCenterV) / 0.085, 2.0));
+      float bankDensity = clamp(bankEnvU * bankEnvV * (0.68 + 0.62 * (cloudWave - 0.35)), 0.0, 1.0);
+
+      // Warm peach-apricot core and rose-salmon edges
+      vec3 coralEdge = vec3(0.935, 0.615, 0.545);
+      vec3 peachCore = vec3(0.992, 0.718, 0.576);
+      vec3 warmGold  = vec3(0.996, 0.765, 0.620);
+
+      float coreHighlight = smoothstep(0.42, 0.78, cloudWave) *
+                            exp(-pow((u - 0.70) / 0.22, 2.0)) *
+                            exp(-pow((v - 0.825) / 0.055, 2.0));
+      vec3 cloudGlow = mix(coralEdge, peachCore, smoothstep(0.30, 0.68, cloudWave));
+      cloudGlow = mix(cloudGlow, warmGold, coreHighlight * 0.75);
+
+      baseSky = mix(baseSky, cloudGlow, bankDensity * 0.92);
+
+      // Upper-right mauve-violet cloud shadow roll (u=0.72..1.00, v=0.88..1.00)
+      float upperRightMask = smoothstep(0.65, 0.92, u) * smoothstep(0.84, 0.96, v);
+      vec3 upperRightShadow = vec3(0.625, 0.495, 0.535);
+      baseSky = mix(baseSky, upperRightShadow, upperRightMask * (0.45 + 0.35 * n1));
+
+      return baseSky;
+    }
+
+    void main() {
+      // Project 3D sky point onto reference camera screen UV
+      vec3 samplePos = uRefCamPos + normalize(vDir) * 320.0;
+      vec2 refUV = worldToRefUV(samplePos);
+
+      // Subtle living cloud drift displacement in UV space
+      vec2 flowUV = refUV * vec2(3.5, 6.0) + vec2(-uTime * 0.012, uTime * 0.003);
+      float driftX = (fbm4(flowUV) - 0.5) * 0.018 * sin(uTime * 0.18 + refUV.x * 4.0);
+      float driftY = (fbm4(flowUV + vec2(11.3, 7.1)) - 0.5) * 0.008 * cos(uTime * 0.15 + refUV.y * 5.0);
+
+      vec3 procSky = computeProceduralSky(refUV, vDir, uTime);
+
+      if (uHasRefTex > 0.5) {
+        // Sample sky region from reference photo with gentle living cloud motion
+        vec2 clampedUV = clamp(refUV + vec2(driftX, driftY), vec2(0.002, 0.735), vec2(0.998, 0.998));
+        // Keep sky sample above the mountain peaks silhouette
+        float minSkyV = mix(0.88, 0.79, smoothstep(0.30, 0.92, clampedUV.x));
+        clampedUV.y = max(clampedUV.y, minSkyV);
+        vec3 texSky = texture2D(uRefTex, clampedUV).rgb;
+
+        // Add subtle animated alpenglow shimmer & cloud breathing
+        float shimmer = (fbm4(refUV * 7.0 + vec2(-uTime * 0.025, 0.0)) - 0.48) * 0.045;
+        texSky += vec3(1.0, 0.62, 0.45) * shimmer * smoothstep(0.35, 0.85, refUV.x);
+
+        float inBounds = smoothstep(0.0, 0.04, refUV.x) *
+                         smoothstep(1.0, 0.96, refUV.x) *
+                         smoothstep(0.68, 0.76, refUV.y) *
+                         smoothstep(1.0, 0.96, refUV.y);
+        gl_FragColor = vec4(mix(procSky, texSky, inBounds * 0.88), 1.0);
+      } else {
+        gl_FragColor = vec4(procSky, 1.0);
+      }
+    }
+  `
+});
+const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skyMesh);
+
+// ============================================================================
+// 4B. TRANSLUCENT 3D DRIFTING CLOUD RIBBONS ABOVE THE TEN PEAKS
+// ============================================================================
+const cloudLayerGroup = new THREE.Group();
+scene.add(cloudLayerGroup);
+
+const cloudRibbonMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms
+  },
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    attribute float aSeed;
+    varying vec2 vUv;
+    varying float vSeed;
+    varying vec3 vWorldPos;
+    void main() {
+      vUv = uv;
+      vSeed = aSeed;
+      vec3 pos = position;
+      // Gentle horizontal wind drift wrapping smoothly
+      float drift = sin(uTime * 0.09 + aSeed * 6.2831) * 6.5;
+      pos.x += drift;
+      vec4 wp = modelMatrix * vec4(pos, 1.0);
+      vWorldPos = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec2 vUv;
+    varying float vSeed;
+    varying vec3 vWorldPos;
+    void main() {
+      vec2 p = vUv * vec2(3.5, 2.0) + vec2(-uTime * 0.018 + vSeed * 5.0, vSeed * 3.1);
+      float n = fbm6(p);
+      float edge = sin(vUv.x * 3.14159) * sin(vUv.y * 3.14159);
+      float alpha = smoothstep(0.38, 0.72, n * edge) * 0.16;
+      if (alpha < 0.003) discard;
+
+      vec2 refUV = worldToRefUV(vWorldPos);
+      vec3 warmCloud = mix(vec3(0.92, 0.65, 0.58), vec3(0.99, 0.73, 0.58), smoothstep(0.4, 0.85, refUV.x));
+      vec3 coolCloud = vec3(0.72, 0.65, 0.68);
+      vec3 col = mix(coolCloud, warmCloud, smoothstep(0.28, 0.62, refUV.x));
+      gl_FragColor = vec4(col, alpha);
+    }
+  `
+});
+
+const cloudConfigs = [
+  { u: 0.72, v: 0.825, z: -260, w: 120, h: 24, seed: 0.15 },
+  { u: 0.56, v: 0.840, z: -275, w: 110, h: 22, seed: 0.42 },
+  { u: 0.86, v: 0.815, z: -250, w: 95,  h: 20, seed: 0.73 },
+  { u: 0.21, v: 0.910, z: -240, w: 70,  h: 18, seed: 0.88 }
+];
+
+for (const cfg of cloudConfigs) {
+  const g = new THREE.PlaneGeometry(cfg.w, cfg.h, 16, 8);
+  const count = g.attributes.position.count;
+  const seeds = new Float32Array(count).fill(cfg.seed);
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+  const m = new THREE.Mesh(g, cloudRibbonMat);
+  const wp = refUVZToWorld(cfg.u, cfg.v, cfg.z);
+  m.position.copy(wp);
+  m.lookAt(REF_CAM_POS);
+  cloudLayerGroup.add(m);
+}
+
+// ============================================================================
+// 5. 3D SCULPTED VALLEY OF THE TEN PEAKS, LEFT CLIFF & SCREE, RIGHT RIDGE (PART 3)
+// ============================================================================
+const terrainMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms
+  },
+  side: THREE.DoubleSide,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    attribute float aLayer;     // 0 = Ten Peaks, 1 = Left Cliff/Scree, 2 = Right Forest Ridge
+    attribute vec2 aRefUV;      // Calibrated reference UV at vertex creation
+    attribute float aCrestDist; // 0 at crest, >0 below crest
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vLayer;
+    varying vec2 vCalibUV;
+    varying float vCrestDist;
+
+    void main() {
+      vLayer = aLayer;
+      vCalibUV = aRefUV;
+      vCrestDist = aCrestDist;
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vLayer;
+    varying vec2 vCalibUV;
+    varying float vCrestDist;
+
+    // Procedural synthesis of Ten Peaks rock strata, couloirs, snow, alpenglow, scree & forest
+    vec3 evaluateProceduralTerrain(vec2 uv, vec3 worldPos, vec3 nrm, float layer) {
+      float u = clamp(uv.x, 0.0, 1.0);
+      float v = clamp(uv.y, 0.34, 1.0);
+
+      // Horizontal Cambrian sedimentary rock strata
+      float strataWarp = fbm4(vec2(u * 6.0, v * 4.0)) * 0.018;
+      float strata1 = sin((v + strataWarp) * 195.0);
+      float strata2 = sin((v + strataWarp * 0.6) * 430.0 + 1.4);
+      float strataBand = 0.5 + 0.32 * strata1 + 0.18 * strata2;
+      float verticalCracks = fbm6(vec2(u * 48.0, v * 14.0));
+      float microRock = fbm4(vec2(u * 95.0, v * 95.0));
+
+      // LAYER 0: Valley of the Ten Peaks + Central Talus Aprons
+      if (layer < 0.5) {
+        vec3 shadowRock = vec3(0.34, 0.27, 0.28);
+        vec3 midRock    = vec3(0.58, 0.44, 0.42);
+        vec3 warmRock   = vec3(0.79, 0.56, 0.49);
+        vec3 rockCol = mix(shadowRock, midRock, strataBand);
+        rockCol = mix(rockCol, warmRock, smoothstep(0.54, 0.78, v) * (0.45 + 0.55 * verticalCracks));
+
+        // Intense golden-orange sunrise alpenglow on Peak 1 (u=0.20..0.255) & Peak 7 (u=0.865..0.99)
+        float glowPeak1 = exp(-pow((u - 0.228) / 0.024, 2.0)) * smoothstep(0.795, 0.825, v);
+        float glowPeak7 = smoothstep(0.865, 0.895, u) * smoothstep(0.720, 0.755, v);
+        vec3 fieryGold  = mix(vec3(0.98, 0.48, 0.12), vec3(1.00, 0.72, 0.26), strataBand);
+        rockCol = mix(rockCol, fieryGold, clamp(glowPeak1 + glowPeak7 * 0.92, 0.0, 1.0));
+
+        // Warm peach-rose alpenglow across Peaks 5 & 6 (u=0.60..0.85)
+        float roseGlow = smoothstep(0.56, 0.72, u) * (1.0 - 0.5 * smoothstep(0.85, 0.90, u)) * smoothstep(0.54, 0.72, v);
+        rockCol = mix(rockCol, vec3(0.87, 0.57, 0.49), roseGlow * 0.48);
+
+        // Snow caps, horizontal snow ledges, and the iconic diagonal white snow couloir
+        float couloirLine = 0.408 + (0.774 - v) * 0.305;
+        float couloirDist = abs(u - couloirLine);
+        float couloirMask = smoothstep(0.011, 0.003, couloirDist + (microRock - 0.5) * 0.004) *
+                            smoothstep(0.555, 0.585, v) * smoothstep(0.785, 0.760, v);
+
+        // Summit snow cap on Peak 2 (u=0.305..0.355, v>0.855) & Peak 1 snow patch
+        float peak2Cap = exp(-pow((u - 0.332) / 0.022, 2.0)) * smoothstep(0.852, 0.868, v);
+        float peak1Snow = exp(-pow((u - 0.226) / 0.020, 2.0)) * exp(-pow((v - 0.808) / 0.012, 2.0));
+
+        // Horizontal snow ledges along strata shelves
+        float ledgeSnow = smoothstep(0.74, 0.92, strata1) * smoothstep(0.46, 0.68, verticalCracks) *
+                          smoothstep(0.56, 0.65, v) * 0.65;
+        // Basal snowfields below Peaks 5 & 6
+        float basalSnow = smoothstep(0.65, 0.70, u) * smoothstep(0.92, 0.86, u) *
+                          exp(-pow((v - 0.548) / 0.018, 2.0)) * smoothstep(0.38, 0.62, verticalCracks);
+
+        float snowMask = clamp(couloirMask + peak2Cap + peak1Snow + ledgeSnow + basalSnow, 0.0, 1.0);
+        vec3 snowCol = mix(vec3(0.86, 0.84, 0.86), vec3(0.97, 0.94, 0.93), smoothstep(0.55, 0.85, v));
+        rockCol = mix(rockCol, snowCol, snowMask);
+
+        // Central and right-center smooth light-tan talus / scree aprons (u=0.37..0.67, v=0.44..0.63)
+        float talusTop1 = 0.605 - abs(u - 0.445) * 1.15;
+        float talus1 = smoothstep(talusTop1 + 0.015, talusTop1 - 0.015, v) *
+                       smoothstep(0.36, 0.39, u) * smoothstep(0.55, 0.51, u);
+        float talusTop2 = 0.630 - abs(u - 0.535) * 1.25;
+        float talus2 = smoothstep(talusTop2 + 0.015, talusTop2 - 0.015, v) *
+                       smoothstep(0.50, 0.52, u) * smoothstep(0.67, 0.62, u);
+        float talusMask = clamp(max(talus1, talus2), 0.0, 1.0);
+
+        float screeStreak = fbm4(vec2((u - 0.46) * 55.0, v * 18.0));
+        vec3 talusCol = mix(vec3(0.69, 0.60, 0.55), vec3(0.80, 0.71, 0.65), screeStreak);
+        // Subtle olive-green alpine grass streaks on second talus cone
+        float grassStreak = talus2 * smoothstep(0.48, 0.68, screeStreak) * smoothstep(0.58, 0.49, v);
+        talusCol = mix(talusCol, vec3(0.36, 0.41, 0.31), grassStreak * 0.55);
+        rockCol = mix(rockCol, talusCol, talusMask);
+
+        return rockCol;
+      }
+
+      // LAYER 1: Left Tower of Babel Dark Stratified Cliff & Conical Scree Slope
+      if (layer < 1.5) {
+        vec3 darkBand1 = vec3(0.14, 0.11, 0.10);
+        vec3 darkBand2 = vec3(0.25, 0.19, 0.16);
+        vec3 warmLedge = vec3(0.38, 0.29, 0.24);
+        vec3 cliffCol = mix(darkBand1, darkBand2, strataBand);
+        cliffCol = mix(cliffCol, warmLedge, smoothstep(0.55, 0.80, verticalCracks) * 0.45);
+
+        // Dark conifer patches clinging to cliff ledges
+        float cliffTrees = smoothstep(0.52, 0.72, fbm4(vec2(u * 35.0, v * 35.0))) *
+                           smoothstep(0.82, 0.52, v);
+        cliffCol = mix(cliffCol, vec3(0.09, 0.13, 0.09), cliffTrees * 0.55);
+
+        // Prominent conical tan scree slope on left shore (apex at u=0.165, v=0.625)
+        float coneApexU = 0.162;
+        float coneTopV = 0.628 - max(0.0, (coneApexU - u) * 1.75) - max(0.0, (u - coneApexU) * 1.02);
+        float screeMask = smoothstep(coneTopV + 0.008, coneTopV - 0.008, v) *
+                          smoothstep(0.075, 0.095, u) * smoothstep(0.365, 0.340, u);
+        float radialStreak = fbm6(vec2((u - coneApexU) * 70.0, (0.63 - v) * 28.0));
+        vec3 screeCol = mix(vec3(0.51, 0.43, 0.36), vec3(0.67, 0.58, 0.49), radialStreak);
+        // Green moss patches on left half of scree cone
+        float mossMask = exp(-pow((u - 0.145) / 0.032, 2.0)) *
+                         smoothstep(0.45, 0.57, v) * smoothstep(0.48, 0.66, radialStreak);
+        screeCol = mix(screeCol, vec3(0.23, 0.29, 0.18), mossMask * 0.72);
+        cliffCol = mix(cliffCol, screeCol, screeMask);
+
+        // Far-left coarse boulder talus slope (u=0.0..0.165, v<0.58 - u*1.0)
+        float boulderTopV = 0.585 - u * 1.02;
+        float boulderMask = smoothstep(boulderTopV + 0.01, boulderTopV - 0.01, v) * smoothstep(0.175, 0.150, u);
+        float boulderNoise = fbm6(vec2(u * 130.0, v * 130.0));
+        vec3 boulderCol = mix(vec3(0.24, 0.20, 0.17), vec3(0.52, 0.45, 0.39), smoothstep(0.32, 0.68, boulderNoise));
+        cliffCol = mix(cliffCol, boulderCol, boulderMask);
+
+        return cliffCol;
+      }
+
+      // LAYER 2: Right & Distant Center Conifer Forest Slope
+      float treeSpire = fbm6(vec2(u * 160.0, v * 28.0));
+      vec3 deepPine = vec3(0.065, 0.105, 0.070);
+      vec3 midSpruce = vec3(0.125, 0.195, 0.120);
+      vec3 sunlitTips = vec3(0.185, 0.265, 0.155);
+      vec3 forestCol = mix(deepPine, midSpruce, smoothstep(0.30, 0.70, treeSpire));
+      forestCol = mix(forestCol, sunlitTips, smoothstep(0.65, 0.88, treeSpire) * smoothstep(0.60, 0.95, u) * 0.45);
+      return forestCol;
+    }
+
+    void main() {
+      // Soft ragged pine-needle or rock-crest alpha cutout right at the silhouette edge if needed
+      vec2 refUV = vCalibUV;
+      vec3 procCol = evaluateProceduralTerrain(refUV, vWorldPos, vNormal, vLayer);
+
+      // Subtle moving cloud shadow modulation across the peaks
+      float cloudShadow = 0.96 + 0.06 * sin(uTime * 0.14 + vWorldPos.x * 0.025 + vWorldPos.z * 0.02);
+      procCol *= cloudShadow;
+
+      if (uHasRefTex > 0.5) {
+        // Sample calibrated reference photo UV on the 3D sculpted terrain surface
+        vec2 sampleUV = clamp(refUV, vec2(0.001, 0.355), vec2(0.999, 0.999));
+
+        // Add subtle 3D normal & wind micro-animation on forest layer
+        if (vLayer > 1.5) {
+          float sway = sin(uTime * 1.45 + vWorldPos.x * 0.22 + vWorldPos.y * 0.35) * 0.0009;
+          sampleUV.x += sway * smoothstep(0.08, 0.0, vCrestDist);
+        }
+
+        vec3 texCol = texture2D(uRefTex, sampleUV).rgb;
+        // Blend 3D micro-relief rock/foliage shading & live cloud shadow
+        float detailDiff = (fbm4(vWorldPos.xy * 0.35) - 0.5) * 0.035;
+        texCol = texCol * cloudShadow + detailDiff;
+
+        // Check how far the camera has orbited from the initial reference viewpoint
+        float camDist = length(uCamPos - uRefCamPos);
+        float orbitBlend = clamp(1.0 - smoothstep(45.0, 180.0, camDist) * 0.45, 0.55, 1.0);
+        gl_FragColor = vec4(mix(procCol, texCol, orbitBlend), 1.0);
+      } else {
+        gl_FragColor = vec4(procCol, 1.0);
+      }
+    }
+  `
+});
+
+// Helper to build a 3D sculpted terrain ribbon from a top silhouette curve and bottom curve
+function createSculptedTerrainLayer({
+  uMin, uMax, uSteps, vSteps,
+  topCurveFn, botCurveFn, depthFn,
+  layerId
+}) {
+  const geo = new THREE.BufferGeometry();
+  const cols = uSteps + 1;
+  const rows = vSteps + 1;
+  const positions = new Float32Array(cols * rows * 3);
+  const refUVs = new Float32Array(cols * rows * 2);
+  const layers = new Float32Array(cols * rows);
+  const crestDists = new Float32Array(cols * rows);
+  const indices = [];
+
+  for (let i = 0; i <= uSteps; i++) {
+    const tu = i / uSteps;
+    const u = THREE.MathUtils.lerp(uMin, uMax, tu);
+    const uClamped = THREE.MathUtils.clamp(u, 0.0, 1.0);
+    const vTop = topCurveFn(uClamped);
+    const vBot = botCurveFn(uClamped);
+
+    for (let j = 0; j <= vSteps; j++) {
+      const tv = j / vSteps; // 0 = bottom (shoreline/base), 1 = top crest
+      const v = THREE.MathUtils.lerp(vBot, vTop, tv);
+      const z = depthFn(uClamped, tv, v);
+      const wp = refUVZToWorld(u, v, z);
+
+      // Clamp bottom row slightly below water surface (y = -1.2) so shoreline is water-tight
+      if (j === 0) {
+        wp.y = Math.min(wp.y, -1.2);
+      }
+
+      const idx = i * rows + j;
+      positions[idx * 3 + 0] = wp.x;
+      positions[idx * 3 + 1] = wp.y;
+      positions[idx * 3 + 2] = wp.z;
+
+      refUVs[idx * 2 + 0] = uClamped;
+      refUVs[idx * 2 + 1] = THREE.MathUtils.clamp(v, 0.0, 1.0);
+      layers[idx] = layerId;
+      crestDists[idx] = Math.max(0.0, vTop - v);
+    }
+  }
+
+  for (let i = 0; i < uSteps; i++) {
+    for (let j = 0; j < vSteps; j++) {
+      const a = i * rows + j;
+      const b = (i + 1) * rows + j;
+      const c = (i + 1) * rows + (j + 1);
+      const d = i * rows + (j + 1);
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aRefUV', new THREE.BufferAttribute(refUVs, 2));
+  geo.setAttribute('aLayer', new THREE.BufferAttribute(layers, 1));
+  geo.setAttribute('aCrestDist', new THREE.BufferAttribute(crestDists, 1));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, terrainMaterial);
+}
+
+// 1) Valley of the Ten Peaks 3D Amphitheater Mesh (Layer 0)
+const peaksMesh = createSculptedTerrainLayer({
+  uMin: 0.16,
+  uMax: 1.05,
+  uSteps: 260,
+  vSteps: 90,
+  layerId: 0.0,
+  topCurveFn: (u) => samplePiecewise(u, PEAKS_SILHOUETTE_PTS),
+  botCurveFn: (u) => samplePiecewise(u, SHORELINE_PTS) - 0.012,
+  depthFn: (u, tv, v) => {
+    // Curved 3D amphitheater depth + 3D relief for peaks, couloirs, and basal talus cones
+    const arch = Math.sin(THREE.MathUtils.clamp((u - 0.20) / 0.80, 0.0, 1.0) * Math.PI);
+    const baseZ = -170.0 - 42.0 * arch;
+    // Peaks jut forward slightly on buttresses; couloirs recess inward; talus slopes forward to shore
+    const couloirRecess = Math.exp(-Math.pow((u - (0.408 + (0.774 - v) * 0.305)) / 0.018, 2.0)) * -10.0;
+    const peakRelief = Math.sin(u * 38.0) * 6.5 * tv;
+    const talusForward = Math.pow(1.0 - tv, 1.6) * 32.0;
+    return baseZ + peakRelief + couloirRecess + talusForward;
+  }
+});
+scene.add(peaksMesh);
+
+// 2) Left Tower of Babel Dark Cliff & Conical Scree Slope Mesh (Layer 1)
+const leftCliffMesh = createSculptedTerrainLayer({
+  uMin: -0.05,
+  uMax: 0.465,
+  uSteps: 160,
+  vSteps: 80,
+  layerId: 1.0,
+  topCurveFn: (u) => samplePiecewise(u, LEFT_CLIFF_PTS),
+  botCurveFn: (u) => samplePiecewise(u, SHORELINE_PTS) - 0.015,
+  depthFn: (u, tv, v) => {
+    // Sweeps in 3D from foreground left (z = +48) to distant end of lake (z = -132)
+    const t = THREE.MathUtils.clamp(u / 0.46, 0.0, 1.0);
+    const sweepZ = THREE.MathUtils.lerp(48.0, -132.0, Math.pow(t, 0.88));
+    // Conical scree slope bulges toward the shoreline
+    const screeBulge = Math.exp(-Math.pow((u - 0.19) / 0.11, 2.0)) * (1.0 - tv) * 14.0;
+    const cliffLedges = Math.sin(v * 95.0) * 1.4 * tv;
+    return sweepZ + screeBulge + cliffLedges;
+  }
+});
+scene.add(leftCliffMesh);
+
+// 3) Right & Center Conifer Forest Ridge Mesh (Layer 2)
+const rightRidgeMesh = createSculptedTerrainLayer({
+  uMin: 0.32,
+  uMax: 1.05,
+  uSteps: 180,
+  vSteps: 64,
+  layerId: 2.0,
+  topCurveFn: (u) => samplePiecewise(u, FOREST_TOP_PTS),
+  botCurveFn: (u) => samplePiecewise(u, SHORELINE_PTS) - 0.015,
+  depthFn: (u, tv, v) => {
+    // Sweeps from distant center shore (z = -128) forward along the right shoreline (z = +52)
+    const t = THREE.MathUtils.clamp((u - 0.52) / 0.48, 0.0, 1.0);
+    const sweepZ = THREE.MathUtils.lerp(-128.0, 52.0, Math.pow(t, 1.15));
+    const slopeBack = tv * -12.0;
+    return sweepZ + slopeBack;
+  }
+});
+scene.add(rightRidgeMesh);
+
+// ============================================================================
+// 6. 3D INSTANCED ENGELMANN SPRUCE & SUBALPINE FIR FOREST WITH WIND SWAY (PART 4)
+// ============================================================================
+function createSpruceTreeGeometry() {
+  // Build a slender, multi-tiered subalpine fir / Engelmann spruce spire
+  const tiers = 6;
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  let vertexOffset = 0;
+
+  for (let t = 0; t < tiers; t++) {
+    const frac = t / (tiers - 1); // 0 = bottom tier, 1 = top spire
+    const yBase = frac * 0.68;
+    const yTip = Math.min(1.0, yBase + 0.38 * (1.0 - frac * 0.35));
+    const radius = THREE.MathUtils.lerp(0.24, 0.045, Math.pow(frac, 0.85));
+    const radialSegs = 7;
+
+    // Apex vertex of this tier
+    const apexIdx = vertexOffset++;
+    positions.push(0.0, yTip, 0.0);
+    normals.push(0.0, 1.0, 0.0);
+    uvs.push(0.5, yTip);
+
+    for (let s = 0; s <= radialSegs; s++) {
+      const ang = (s / radialSegs) * Math.PI * 2.0;
+      const jag = (s % 2 === 0) ? 1.0 : 0.78;
+      const rx = Math.cos(ang) * radius * jag;
+      const rz = Math.sin(ang) * radius * jag;
+      const ry = yBase + ((s % 2 === 0) ? -0.025 : 0.015);
+      positions.push(rx, Math.max(0.0, ry), rz);
+      const n = new THREE.Vector3(rx, 0.25, rz).normalize();
+      normals.push(n.x, n.y, n.z);
+      uvs.push(s / radialSegs, Math.max(0.0, ry));
+      vertexOffset++;
+    }
+
+    for (let s = 0; s < radialSegs; s++) {
+      const b1 = apexIdx + 1 + s;
+      const b2 = apexIdx + 1 + s + 1;
+      indices.push(apexIdx, b1, b2);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  return geo;
+}
+
+const spruceGeo = createSpruceTreeGeometry();
+const spruceMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms
+  },
+  side: THREE.DoubleSide,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    attribute float aTreeSeed;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vHeightFrac;
+    varying float vSeed;
+
+    void main() {
+      vHeightFrac = clamp(position.y, 0.0, 1.0);
+      vSeed = aTreeSeed;
+
+      // Natural continuous mountain wind sway affecting upper tree crowns
+      vec4 instOrigin = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float windPhase = uTime * 1.35 + instOrigin.x * 0.11 + instOrigin.z * 0.08 + aTreeSeed * 6.283;
+      float gust = sin(windPhase) * 0.65 + sin(windPhase * 2.3 + 1.1) * 0.35;
+      float bend = pow(vHeightFrac, 1.85) * 0.045 * gust;
+
+      vec3 localPos = position;
+      localPos.x += bend;
+      localPos.z += bend * 0.5;
+
+      vec4 wp = modelMatrix * instanceMatrix * vec4(localPos, 1.0);
+      vWorldPos = wp.xyz;
+      vNormal = normalize(mat3(modelMatrix * instanceMatrix) * normal);
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vHeightFrac;
+    varying float vSeed;
+
+    void main() {
+      // Fine conifer needle texture & bough self-shadowing
+      float needleNoise = fbm4(vWorldPos.xy * 2.8 + vec2(vSeed * 13.7));
+      vec3 deepShadowPine = vec3(0.055, 0.090, 0.060);
+      vec3 midSpruceGreen = vec3(0.115, 0.180, 0.112);
+      vec3 warmCrownTip   = vec3(0.175, 0.250, 0.148);
+
+      float lightDot = clamp(dot(normalize(vNormal), normalize(vec3(-0.35, 0.75, 0.45))), 0.0, 1.0);
+      vec3 treeCol = mix(deepShadowPine, midSpruceGreen, smoothstep(0.15, 0.85, vHeightFrac * 0.65 + lightDot * 0.35));
+      treeCol = mix(treeCol, warmCrownTip, smoothstep(0.65, 0.98, vHeightFrac) * needleNoise * 0.65);
+
+      if (uHasRefTex > 0.5) {
+        vec2 refUV = worldToRefUV(vWorldPos);
+        // Sample forest region color so 3D swaying spires match photographic tonal balance
+        vec2 clampedUV = clamp(refUV, vec2(0.002, 0.360), vec2(0.998, 0.620));
+        vec3 refSample = texture2D(uRefTex, clampedUV).rgb;
+        // Only blend if reference sample is dark forest tone (avoid bright rock bleed onto spire tips)
+        float refLuma = dot(refSample, vec3(0.299, 0.587, 0.114));
+        float darkForestMask = smoothstep(0.32, 0.16, refLuma);
+        treeCol = mix(treeCol, refSample * (0.92 + 0.16 * needleNoise), darkForestMask * 0.68);
+      }
+
+      gl_FragColor = vec4(treeCol, 1.0);
+    }
+  `
+});
+
+// Deterministic pseudo-random generator for reproducible tree placement matching the photo
+let rngState = 133742;
+function nextRand() {
+  rngState = (rngState * 1664525 + 1013904223) >>> 0;
+  return rngState / 4294967296.0;
+}
+
+const treeTransforms = [];
+const treeSeeds = [];
+const dummyObj = new THREE.Object3D();
+
+function addSpruceInstance(u, vBase, z, heightWorld, widthScale) {
+  const wp = refUVZToWorld(u, vBase, z);
+  dummyObj.position.copy(wp);
+  dummyObj.rotation.set(
+    (nextRand() - 0.5) * 0.04,
+    nextRand() * Math.PI * 2.0,
+    (nextRand() - 0.5) * 0.04
+  );
+  dummyObj.scale.set(heightWorld * widthScale, heightWorld, heightWorld * widthScale);
+  dummyObj.updateMatrix();
+  treeTransforms.push(dummyObj.matrix.clone());
+  treeSeeds.push(nextRand());
+}
+
+// 1) Right forest crest & slope spires (u = 0.51..1.00)
+for (let i = 0; i < 620; i++) {
+  const u = 0.51 + (i / 620) * 0.50 + (nextRand() - 0.5) * 0.003;
+  const uClamped = THREE.MathUtils.clamp(u, 0.51, 1.0);
+  const vTop = samplePiecewise(uClamped, FOREST_TOP_PTS);
+  const vShore = samplePiecewise(uClamped, SHORELINE_PTS);
+
+  // Concentrate spire tips right along the crest and across the visible slope
+  const rowBias = Math.pow(nextRand(), 0.58);
+  const vBase = THREE.MathUtils.lerp(vShore, vTop - 0.014, rowBias);
+  const tDepth = THREE.MathUtils.clamp((uClamped - 0.52) / 0.48, 0.0, 1.0);
+  const z = THREE.MathUtils.lerp(-128.0, 52.0, Math.pow(tDepth, 1.15)) - rowBias * 11.5;
+  const distScale = Math.abs(z - REF_CAM_POS.z) / 180.0;
+  const treeH = (4.2 + nextRand() * 3.2) * distScale;
+  addSpruceInstance(u, vBase, z, treeH, 0.72 + nextRand() * 0.28);
+}
+
+// 2) Distant center-left shoreline forest (u = 0.325..0.51)
+for (let i = 0; i < 180; i++) {
+  const u = 0.325 + nextRand() * 0.185;
+  const vTop = samplePiecewise(u, FOREST_TOP_PTS);
+  const vShore = samplePiecewise(u, SHORELINE_PTS);
+  const frac = nextRand();
+  const vBase = THREE.MathUtils.lerp(vShore, vTop - 0.012, frac);
+  const z = THREE.MathUtils.lerp(-112.0, -132.0, (u - 0.32) / 0.19) - frac * 6.0;
+  const treeH = 3.8 + nextRand() * 2.8;
+  addSpruceInstance(u, vBase, z, treeH, 0.75 + nextRand() * 0.25);
+}
+
+// 3) Left foreground boulder shoreline scattered small conifers (seen at u = 0.012..0.172)
+const leftShoreTreeSpots = [
+  { u: 0.018, h: 4.6 }, { u: 0.031, h: 3.8 }, { u: 0.052, h: 3.1 },
+  { u: 0.095, h: 2.9 }, { u: 0.128, h: 3.2 }, { u: 0.163, h: 3.7 },
+  { u: 0.168, h: 4.1 }
+];
+for (const spot of leftShoreTreeSpots) {
+  const vShore = samplePiecewise(spot.u, SHORELINE_PTS);
+  const t = THREE.MathUtils.clamp(spot.u / 0.46, 0.0, 1.0);
+  const z = THREE.MathUtils.lerp(48.0, -132.0, Math.pow(t, 0.88)) + 3.0;
+  addSpruceInstance(spot.u, vShore - 0.002, z, spot.h, 0.68);
+}
+
+const totalTrees = treeTransforms.length;
+const spruceInstancedMesh = new THREE.InstancedMesh(spruceGeo, spruceMat, totalTrees);
+const seedAttr = new Float32Array(totalTrees);
+for (let i = 0; i < totalTrees; i++) {
+  spruceInstancedMesh.setMatrixAt(i, treeTransforms[i]);
+  seedAttr[i] = treeSeeds[i];
+}
+spruceInstancedMesh.instanceMatrix.needsUpdate = true;
+spruceGeo.setAttribute('aTreeSeed', new THREE.InstancedBufferAttribute(seedAttr, 1));
+scene.add(spruceInstancedMesh);
+
+// ============================================================================
+// 7. MORAINE LAKE GLACIAL TURQUOISE WATER SURFACE & REAL-TIME REFLECTION (PART 5)
+// ============================================================================
+function createLakeSurfaceGeometry(uSteps = 220, vSteps = 110) {
+  const geo = new THREE.BufferGeometry();
+  const cols = uSteps + 1;
+  const rows = vSteps + 1;
+  const positions = new Float32Array(cols * rows * 3);
+  const refUVs = new Float32Array(cols * rows * 2);
+  const shoreVs = new Float32Array(cols * rows);
+  const indices = [];
+
+  for (let i = 0; i <= uSteps; i++) {
+    const tu = i / uSteps;
+    const u = THREE.MathUtils.lerp(-0.08, 1.08, tu);
+    const uClamped = THREE.MathUtils.clamp(u, 0.0, 1.0);
+    const vShore = samplePiecewise(uClamped, SHORELINE_PTS);
+
+    // Match 3D depth at the shoreline to the surrounding terrain
+    let zShore = -130.0;
+    if (uClamped < 0.36) {
+      const tL = THREE.MathUtils.clamp(uClamped / 0.46, 0.0, 1.0);
+      zShore = THREE.MathUtils.lerp(48.0, -132.0, Math.pow(tL, 0.88));
+    } else if (uClamped > 0.58) {
+      const tR = THREE.MathUtils.clamp((uClamped - 0.52) / 0.48, 0.0, 1.0);
+      zShore = THREE.MathUtils.lerp(-128.0, 52.0, Math.pow(tR, 1.15));
+    }
+
+    for (let j = 0; j <= vSteps; j++) {
+      const tv = j / vSteps; // 0 = foreground bottom, 1 = shoreline
+      const v = THREE.MathUtils.lerp(-0.04, vShore + 0.0015, tv);
+      const z = THREE.MathUtils.lerp(116.0, zShore, Math.pow(tv, 0.86));
+      const wp = refUVZToWorld(u, v, z);
+
+      const idx = i * rows + j;
+      positions[idx * 3 + 0] = wp.x;
+      positions[idx * 3 + 1] = wp.y;
+      positions[idx * 3 + 2] = wp.z;
+
+      refUVs[idx * 2 + 0] = uClamped;
+      refUVs[idx * 2 + 1] = THREE.MathUtils.clamp(v, 0.0, 1.0);
+      shoreVs[idx] = vShore;
+    }
+  }
+
+  for (let i = 0; i < uSteps; i++) {
+    for (let j = 0; j < vSteps; j++) {
+      const a = i * rows + j;
+      const b = (i + 1) * rows + j;
+      const c = (i + 1) * rows + (j + 1);
+      const d = i * rows + (j + 1);
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aRefUV', new THREE.BufferAttribute(refUVs, 2));
+  geo.setAttribute('aShoreV', new THREE.BufferAttribute(shoreVs, 1));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+const lakeGeo = createLakeSurfaceGeometry();
+const lakeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms,
+    uReflectionTex: { value: reflectionRT.texture }
+  },
+  side: THREE.DoubleSide,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    attribute vec2 aRefUV;
+    attribute float aShoreV;
+    varying vec3 vWorldPos;
+    varying vec2 vCalibUV;
+    varying float vShoreV;
+    varying vec4 vClipPos;
+
+    void main() {
+      vCalibUV = aRefUV;
+      vShoreV = aShoreV;
+      vec3 pos = position;
+      // Subtle physical micro-swell on the 3D water surface
+      float shoreDist = max(0.0, aShoreV - aRefUV.y);
+      float swell = sin(uTime * 1.6 + pos.x * 0.18 + pos.z * 0.22) * 0.04 * smoothstep(0.0, 0.05, shoreDist);
+      pos.y += swell;
+
+      vec4 wp = modelMatrix * vec4(pos, 1.0);
+      vWorldPos = wp.xyz;
+      vClipPos = projectionMatrix * viewMatrix * wp;
+      gl_Position = vClipPos;
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    uniform sampler2D uReflectionTex;
+    varying vec3 vWorldPos;
+    varying vec2 vCalibUV;
+    varying float vShoreV;
+    varying vec4 vClipPos;
+
+    // Multi-layered animated capillary & breeze ripples across the glacial lake
+    vec2 computeWaterRipples(vec2 uv, vec3 worldPos, float shoreDist, float t) {
+      // Perspective-scaled frequency: finer ripples near the distant shoreline, broader in foreground
+      float persp = mix(3.2, 1.0, clamp(shoreDist / 0.40, 0.0, 1.0));
+      vec2 p = vec2(uv.x * 42.0 * persp, uv.y * 190.0 * persp);
+
+      float w1 = sin(p.y * 1.15 - t * 1.85 + sin(p.x * 0.45 + t * 0.6));
+      float w2 = cos(p.y * 2.35 + t * 1.42 + p.x * 0.85);
+      float w3 = sin(p.y * 4.20 - t * 2.40 - p.x * 1.30) * 0.5;
+      float nWave = (fbm4(p * 0.22 + vec2(t * 0.16, -t * 0.09)) - 0.5) * 2.0;
+
+      // Calm mirror-like glacial water with gentle horizontal ripple streaks
+      float atten = smoothstep(0.001, 0.025, shoreDist);
+      float dx = (w1 * 0.42 + w2 * 0.35 + nWave * 0.45) * 0.0022 * atten;
+      float dy = (w2 * 0.38 + w3 * 0.42 + nWave * 0.35) * 0.0030 * atten;
+      return vec2(dx, dy);
+    }
+
+    void main() {
+      float shoreDist = max(0.0, vShoreV - vCalibUV.y);
+      vec2 ripple = computeWaterRipples(vCalibUV, vWorldPos, shoreDist, uTime);
+
+      // Screen-space UV for real-time 3D planar reflection render target
+      vec2 screenUV = (vClipPos.xy / max(0.0001, vClipPos.w)) * 0.5 + 0.5;
+      vec2 reflSampleUV = clamp(vec2(screenUV.x, 1.0 - screenUV.y) + ripple * 1.35, 0.002, 0.998);
+      vec3 rtReflection = texture2D(uReflectionTex, reflSampleUV).rgb;
+
+      // Moraine Lake signature glacial rock-flour turquoise-teal absorption & scatter
+      vec3 deepGlacialTeal = vec3(0.035, 0.315, 0.395);
+      vec3 midTurquoise    = vec3(0.085, 0.415, 0.485);
+      vec3 shallowCyan     = vec3(0.125, 0.465, 0.525);
+
+      float vFrac = clamp(vCalibUV.y / max(0.01, vShoreV), 0.0, 1.0);
+      vec3 turquoiseBody = mix(deepGlacialTeal, midTurquoise, smoothstep(0.0, 0.65, vFrac));
+      turquoiseBody = mix(turquoiseBody, shallowCyan, smoothstep(0.60, 0.95, vFrac) * 0.45);
+
+      // Fresnel factor: steeper viewing angle near bottom of frame shows more deep turquoise water body;
+      // grazing angle toward shoreline reflects more of the mountains, forest, and clouds
+      float fresnel = mix(0.46, 0.78, pow(vFrac, 0.75));
+      vec3 rtWaterCol = mix(turquoiseBody, rtReflection * vec3(0.72, 0.92, 0.96), fresnel);
+
+      if (uHasRefTex > 0.5) {
+        // Sample the reference lake reflection perturbed by live animated water ripples
+        vec2 animatedLakeUV = clamp(vCalibUV + ripple, vec2(0.001, 0.001), vec2(0.999, vShoreV - 0.002));
+        vec3 refLakeCol = texture2D(uRefTex, animatedLakeUV).rgb;
+
+        // Add subtle live shimmer on reflected snow couloir & golden alpenglow
+        float rippleHighlight = sin(vCalibUV.y * 340.0 - uTime * 2.2 + vCalibUV.x * 45.0) * 0.012;
+        refLakeCol += vec3(0.06, 0.14, 0.16) * rippleHighlight * smoothstep(0.0, 0.08, shoreDist);
+
+        // Blend seamlessly between live-rippled reference water at opening camera and 3D RT reflection when orbiting
+        float camDist = length(uCamPos - uRefCamPos);
+        float orbitFactor = smoothstep(18.0, 110.0, camDist);
+        vec3 combined = mix(refLakeCol, mix(refLakeCol, rtWaterCol, 0.55), orbitFactor);
+        // Subtle live reflection coupling even at rest
+        combined = mix(combined, rtWaterCol, 0.12);
+        gl_FragColor = vec4(combined, 1.0);
+      } else {
+        gl_FragColor = vec4(rtWaterCol, 1.0);
+      }
+    }
+  `
+});
+
+const lakeMesh = new THREE.Mesh(lakeGeo, lakeMat);
+scene.add(lakeMesh);
+
+// ============================================================================
+// 8. DELICATE DRIFTING MORNING MIST WISPS OVER THE GLACIAL LAKE
+// ============================================================================
+const mistGroup = new THREE.Group();
+scene.add(mistGroup);
+
+const mistMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...sharedUniforms
+  },
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  vertexShader: /* glsl */ `
+    ${COMMON_GLSL}
+    attribute float aMistSeed;
+    varying vec2 vUv;
+    varying float vSeed;
+    void main() {
+      vUv = uv;
+      vSeed = aMistSeed;
+      vec3 pos = position;
+      pos.x += sin(uTime * 0.16 + aMistSeed * 6.283) * 8.0;
+      pos.y += cos(uTime * 0.22 + aMistSeed * 4.1) * 0.35;
+      gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    ${COMMON_GLSL}
+    varying vec2 vUv;
+    varying float vSeed;
+    void main() {
+      vec2 p = vUv * vec2(3.2, 1.8) + vec2(uTime * 0.032 + vSeed * 7.3, -uTime * 0.008);
+      float n = fbm4(p);
+      float env = sin(vUv.x * 3.14159) * sin(vUv.y * 3.14159);
+      float alpha = smoothstep(0.42, 0.78, n * env) * 0.055;
+      if (alpha < 0.002) discard;
+      vec3 mistCol = vec3(0.72, 0.82, 0.85);
+      gl_FragColor = vec4(mistCol, alpha);
+    }
+  `
+});
+
+const mistBands = [
+  { u: 0.46, v: 0.442, z: -118, w: 68, h: 4.2, seed: 0.12 },
+  { u: 0.58, v: 0.432, z: -102, w: 54, h: 3.6, seed: 0.47 },
+  { u: 0.34, v: 0.438, z: -110, w: 50, h: 3.5, seed: 0.81 }
+];
+
+for (const mb of mistBands) {
+  const g = new THREE.PlaneGeometry(mb.w, mb.h, 12, 4);
+  const count = g.attributes.position.count;
+  g.setAttribute('aMistSeed', new THREE.BufferAttribute(new Float32Array(count).fill(mb.seed), 1));
+  const m = new THREE.Mesh(g, mistMat);
+  m.position.copy(refUVZToWorld(mb.u, mb.v, mb.z));
+  m.lookAt(REF_CAM_POS);
+  mistGroup.add(m);
+}
+
+// ============================================================================
+// 9. RESIZE HANDLER & CONTINUOUS NATURAL MOTION RENDER LOOP
+// ============================================================================
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  updateCameraFovForAspect();
+});
+
+const clock = new THREE.Clock();
+
+function updateReflectionCamera() {
+  // Mirror camera across the mean lake plane (y = 13.2) for real-time 3D planar reflection
+  const waterPlaneY = 13.2;
+  reflectionCamera.aspect = camera.aspect;
+  reflectionCamera.fov = camera.fov;
+  reflectionCamera.updateProjectionMatrix();
+
+  reflectionCamera.position.copy(camera.position);
+  reflectionCamera.position.y = 2.0 * waterPlaneY - camera.position.y;
+
+  const targetMirrored = controls.target.clone();
+  targetMirrored.y = 2.0 * waterPlaneY - controls.target.y;
+  reflectionCamera.up.set(0, -1, 0);
+  reflectionCamera.lookAt(targetMirrored);
+  reflectionCamera.updateMatrixWorld(true);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const elapsed = clock.getElapsedTime();
+  sharedUniforms.uTime.value = elapsed;
+  controls.update();
+  sharedUniforms.uCamPos.value.copy(camera.position);
+
+  // 1. Render real-time 3D mirrored reflection pass (excluding lake surface)
+  lakeMesh.visible = false;
+  sharedUniforms.uIsReflection.value = 1.0;
+  updateReflectionCamera();
+  renderer.setRenderTarget(reflectionRT);
+  renderer.clear();
+  renderer.render(scene, reflectionCamera);
+
+  // 2. Render main 3D scene pass
+  renderer.setRenderTarget(null);
+  lakeMesh.visible = true;
+  sharedUniforms.uIsReflection.value = 0.0;
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
