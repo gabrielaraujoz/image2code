@@ -3,30 +3,156 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Peggy's Point Lighthouse — Winter Live Photograph</title>
+  <title>Peggy's Cove Lighthouse — Photorealistic 3D Scene</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      user-select: none;
-      -webkit-user-select: none;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #6b9be3;
+      background: #1a2d47;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
     }
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-      cursor: grab;
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
     }
-    canvas:active {
-      cursor: grabbing;
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      color: #f4f8ff;
+      background: rgba(14, 24, 38, 0.58);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 14px;
+      padding: 14px 16px;
+      width: 270px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+      transition: transform 0.3s ease, opacity 0.3s ease;
     }
+    #hud.collapsed .hud-body { display: none; }
+    .hud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .hud-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #ffffff;
+    }
+    .hud-subtitle {
+      font-size: 11px;
+      color: rgba(215, 232, 255, 0.78);
+      margin-top: 2px;
+    }
+    #toggle-hud {
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      color: #fff;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      transition: background 0.2s;
+    }
+    #toggle-hud:hover { background: rgba(255, 255, 255, 0.24); }
+    .hud-body { margin-top: 12px; }
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(200, 222, 250, 0.72);
+      margin: 10px 0 6px;
+    }
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    button.ctrl-btn {
+      background: rgba(255, 255, 255, 0.1);
+      color: #eef5ff;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      padding: 7px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    button.ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    button.ctrl-btn.active {
+      background: rgba(208, 46, 54, 0.85);
+      border-color: rgba(255, 165, 165, 0.55);
+      color: #fff;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 9px;
+      font-size: 12px;
+      color: rgba(235, 244, 255, 0.9);
+    }
+    .toggle-row input[type="checkbox"] {
+      accent-color: #d6323a;
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+    .hint {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 10.5px;
+      color: rgba(210, 228, 250, 0.7);
+      line-height: 1.4;
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 40%, #2d5588, #101f33);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      z-index: 100;
+      transition: opacity 0.6s ease;
+    }
+    #loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid rgba(255,255,255,0.2);
+      border-top-color: #e23c44;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
   <script type="importmap">
     {
@@ -38,442 +164,66 @@
   </script>
 </head>
 <body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;">Building 3D Coastal Scene...</div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="hud">
+    <div class="hud-header">
+      <div>
+        <div class="hud-title">Peggy's Cove 3D</div>
+        <div class="hud-subtitle">Photorealistic Interactive Scene</div>
+      </div>
+      <button id="toggle-hud" title="Collapse Controls">−</button>
+    </div>
+    <div class="hud-body">
+      <div class="section-label">Camera Views</div>
+      <div class="btn-grid">
+        <button class="ctrl-btn active" data-cam="photo">Original Photo</button>
+        <button class="ctrl-btn" data-cam="aerial">Aerial Orbit</button>
+        <button class="ctrl-btn" data-cam="closeup">Lighthouse</button>
+        <button class="ctrl-btn" data-cam="shore">Shore Rocks</button>
+      </div>
+
+      <div class="section-label">Lighting</div>
+      <div class="btn-grid-3">
+        <button class="ctrl-btn active" data-light="noon">Winter Sun</button>
+        <button class="ctrl-btn" data-light="sunset">Sunset</button>
+        <button class="ctrl-btn" data-light="twilight">Blue Hour</button>
+      </div>
+
+      <div class="toggle-row">
+        <label for="chk-beam">Lighthouse Beam</label>
+        <input type="checkbox" id="chk-beam" />
+      </div>
+      <div class="toggle-row">
+        <label for="chk-snow">Light Snow Flurries</label>
+        <input type="checkbox" id="chk-snow" />
+      </div>
+
+      <div class="hint">
+        Drag to orbit &bull; Scroll to zoom &bull; Right-drag to pan
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
     // =========================================================================
-    // 1. SCENE, RENDERER & CAMERA SETUP (Calibrated to Reference Photograph)
-    // =========================================================================
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance'
-    });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.06;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    document.body.appendChild(renderer.domElement);
-
-    const scene = new THREE.Scene();
-
-    // Camera framed to match the reference viewpoint (horizon at ~47.2% from bottom)
-    const camera = new THREE.PerspectiveCamera(
-      35,
-      window.innerWidth / window.innerHeight,
-      0.2,
-      2500
-    );
-    camera.position.set(0.0, 2.40, 28.0);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0.0, 2.82, 0.0);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.enablePan = false;
-    controls.minDistance = 8.0;
-    controls.maxDistance = 95.0;
-    controls.minPolarAngle = 0.15;
-    controls.maxPolarAngle = Math.PI * 0.492;
-    controls.update();
-
-    // =========================================================================
-    // 2. WINTER SUN & SKY LIGHTING
-    // =========================================================================
-    // Sun shines from left-front at ~33 deg elevation, casting crisp blue shadows right
-    const sunDirection = new THREE.Vector3(-0.74, 0.54, 0.40).normalize();
-
-    const sunLight = new THREE.DirectionalLight(0xfffcf5, 3.15);
-    sunLight.position.copy(sunDirection).multiplyScalar(120);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 4096;
-    sunLight.shadow.mapSize.height = 4096;
-    sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 260;
-    const d = 52;
-    sunLight.shadow.camera.left = -d;
-    sunLight.shadow.camera.right = d;
-    sunLight.shadow.camera.top = d;
-    sunLight.shadow.camera.bottom = -d;
-    sunLight.shadow.bias = -0.00035;
-    sunLight.shadow.normalBias = 0.015;
-    scene.add(sunLight);
-
-    // Cool crisp winter sky hemisphere fill light
-    const hemiLight = new THREE.HemisphereLight(0x8cb8f2, 0x5c6e87, 1.35);
-    hemiLight.position.set(0, 60, 0);
-    scene.add(hemiLight);
-
-    // Subtle snow bounce fill from below-left
-    const bounceLight = new THREE.DirectionalLight(0xcce0ff, 0.55);
-    bounceLight.position.set(0.6, -0.3, 0.7).multiplyScalar(50);
-    scene.add(bounceLight);
-
-    // =========================================================================
-    // 3. ATMOSPHERIC SKY DOME & DISTANT HORIZON CLOUDS SHADER
-    // =========================================================================
-    const skyUniforms = {
-      uTime: { value: 0 },
-      uSunDir: { value: sunDirection.clone() }
-    };
-
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: skyUniforms,
-      vertexShader: /* glsl */ `
-        varying vec3 vWorldPos;
-        void main() {
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          vWorldPos = wp.xyz;
-          gl_Position = projectionMatrix * viewMatrix * wp;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        varying vec3 vWorldPos;
-        uniform float uTime;
-        uniform vec3 uSunDir;
-
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          float a = hash(i);
-          float b = hash(i + vec2(1.0, 0.0));
-          float c = hash(i + vec2(0.0, 1.0));
-          float d = hash(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-        }
-
-        float fbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-          for (int i = 0; i < 5; i++) {
-            v += a * noise(p);
-            p = rot * p * 2.03;
-            a *= 0.5;
-          }
-          return v;
-        }
-
-        void main() {
-          vec3 dir = normalize(vWorldPos);
-          float elev = max(dir.y, 0.0);
-
-          // Clear Nova Scotia winter sky gradient matching reference photo
-          vec3 horizonCol = vec3(0.76, 0.855, 0.965);
-          vec3 lowSkyCol  = vec3(0.51, 0.695, 0.925);
-          vec3 midSkyCol  = vec3(0.37, 0.575, 0.855);
-          vec3 zenithCol  = vec3(0.27, 0.465, 0.775);
-
-          vec3 sky = mix(horizonCol, lowSkyCol, smoothstep(0.0, 0.065, elev));
-          sky = mix(sky, midSkyCol, smoothstep(0.05, 0.24, elev));
-          sky = mix(sky, zenithCol, smoothstep(0.22, 0.65, elev));
-
-          // Subtle brighter atmospheric glow toward the left (sun side)
-          float sunAz = clamp(-dir.x * 0.5 + 0.5, 0.0, 1.0);
-          sky += vec3(0.035, 0.04, 0.045) * sunAz * exp(-elev * 5.0);
-
-          // Distant low horizon stratocumulus clouds on the right side (as in photo)
-          if (dir.y > -0.01 && dir.y < 0.25 && dir.z < 0.2) {
-            float az = atan(dir.x, -dir.z); // 0 is center, positive is right
-            // Cloud band concentrated on right horizon (az > 0.02)
-            float rightMask = smoothstep(-0.02, 0.16, az) * smoothstep(1.3, 0.5, az);
-            vec2 cloudUV = vec2(az * 14.0 - uTime * 0.012, elev * 95.0);
-            float n1 = fbm(cloudUV);
-            float n2 = fbm(cloudUV * 2.1 + vec2(3.7, -1.4));
-
-            // Main low cloud bank right above the distant headland (elev ~ 0.012 to 0.052)
-            float bandProfile = smoothstep(0.006, 0.020, elev) * smoothstep(0.062, 0.022, elev);
-            float cloudShape = smoothstep(0.42, 0.68, n1 * 0.75 + n2 * 0.25) * bandProfile * rightMask;
-
-            // Upper faint cloud wisps on right (around elev ~ 0.12 - 0.16, az ~ 0.28)
-            float wispMask = exp(-pow((az - 0.29) * 8.0, 2.0)) * exp(-pow((elev - 0.135) * 42.0, 2.0));
-            float wispShape = smoothstep(0.45, 0.72, fbm(vec2(az * 18.0 - uTime * 0.018, elev * 60.0))) * wispMask * 0.45;
-
-            float totalCloud = clamp(cloudShape + wispShape, 0.0, 1.0);
-            float cloudLit = smoothstep(0.015, 0.042, elev + (n2 - 0.5) * 0.015);
-            vec3 cloudShadowCol = vec3(0.55, 0.64, 0.77);
-            vec3 cloudTopCol    = vec3(0.83, 0.88, 0.95);
-            vec3 cloudCol = mix(cloudShadowCol, cloudTopCol, cloudLit);
-
-            sky = mix(sky, cloudCol, totalCloud * 0.82);
-          }
-
-          // Crisp horizon mist blend
-          float horizonHaze = exp(-abs(dir.y) * 55.0);
-          sky = mix(sky, vec3(0.79, 0.87, 0.96), horizonHaze * 0.35);
-
-          gl_FragColor = vec4(sky, 1.0);
-        }
-      `
-    });
-
-    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1800, 64, 48), skyMat);
-    scene.add(skyDome);
-
-    // =========================================================================
-    // 4. ANIMATED ATLANTIC OCEAN SHADER & DISTANT COASTLINE
-    // =========================================================================
-    const oceanUniforms = {
-      uTime: { value: 0 },
-      uSunDir: { value: sunDirection.clone() },
-      uCamPos: { value: camera.position }
-    };
-
-    const oceanGeo = new THREE.PlaneGeometry(2400, 2400, 220, 220);
-    oceanGeo.rotateX(-Math.PI / 2);
-
-    const oceanMat = new THREE.ShaderMaterial({
-      uniforms: oceanUniforms,
-      vertexShader: /* glsl */ `
-        uniform float uTime;
-        varying vec3 vWorldPos;
-        varying float vWaveHeight;
-
-        float wave(vec2 p, vec2 dir, float freq, float speed, float amp) {
-          return sin(dot(p, dir) * freq + uTime * speed) * amp;
-        }
-
-        void main() {
-          vec4 wp = modelMatrix * vec4(position, 1.0);
-          float dist = length(wp.xz);
-          float atten = smoothstep(950.0, 80.0, dist);
-
-          float h = 0.0;
-          h += wave(wp.xz, normalize(vec2(0.85, 0.52)), 0.19, 1.65, 0.14);
-          h += wave(wp.xz, normalize(vec2(0.95, -0.31)), 0.37, 2.20, 0.07);
-          h += wave(wp.xz, normalize(vec2(0.55, 0.83)), 0.73, 2.95, 0.035);
-          h *= atten;
-
-          wp.y += h;
-          vWorldPos = wp.xyz;
-          vWaveHeight = h;
-          gl_Position = projectionMatrix * viewMatrix * wp;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform float uTime;
-        uniform vec3 uSunDir;
-        uniform vec3 uCamPos;
-        varying vec3 vWorldPos;
-        varying float vWaveHeight;
-
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-        }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(
-            mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-            f.y
-          );
-        }
-
-        float fbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          mat2 m = mat2(0.8, 0.6, -0.6, 0.8);
-          for (int i = 0; i < 4; i++) {
-            v += a * noise(p);
-            p = m * p * 2.07;
-            a *= 0.5;
-          }
-          return v;
-        }
-
-        void main() {
-          vec2 p = vWorldPos.xz;
-          float dist = length(p - uCamPos.xz);
-
-          // Multi-scale wind-driven wave normals
-          vec2 uv1 = p * vec2(0.32, 0.58) - vec2(uTime * 0.42, uTime * 0.18);
-          vec2 uv2 = p * vec2(0.85, 1.45) - vec2(uTime * 0.65, -uTime * 0.25);
-          float n1 = fbm(uv1);
-          float n2 = fbm(uv2);
-          float eps = 0.25;
-          float nx = fbm(uv1 + vec2(eps, 0.0)) - n1;
-          float nz = fbm(uv1 + vec2(0.0, eps)) - n1;
-
-          vec3 N = normalize(vec3(-nx * 1.9, 1.0, -nz * 1.9));
-          vec3 V = normalize(uCamPos - vWorldPos);
-          float NoV = max(dot(N, V), 0.0);
-
-          // Cold deep Atlantic winter blue palette matching reference photo
-          vec3 deepWater = vec3(0.095, 0.225, 0.375);
-          vec3 midWater  = vec3(0.145, 0.305, 0.475);
-          vec3 skyRefl   = vec3(0.42, 0.61, 0.84);
-
-          float fresnel = pow(1.0 - NoV, 4.0) * 0.55 + 0.12;
-          vec3 waterCol = mix(deepWater, midWater, n1 * 0.7 + 0.15);
-          waterCol = mix(waterCol, skyRefl, clamp(fresnel, 0.0, 0.65));
-
-          // Wind-blown whitecap streaks & shore surf on left ocean
-          float crest = smoothstep(0.61, 0.78, n1 * 0.65 + n2 * 0.35 + vWaveHeight * 0.8);
-          // Prominent surf bands on left side matching reference left water
-          float surfBand = sin(p.z * 0.28 + p.x * 0.08 + uTime * 1.4 + n1 * 3.5);
-          float leftSurf = smoothstep(0.75, 0.96, surfBand) *
-                           smoothstep(-10.0, -45.0, p.x) *
-                           smoothstep(-260.0, -45.0, p.z) * 0.55;
-
-          // Foam Ring around the granite headland perimeter
-          vec2 headCenter = vec2(2.0, -14.0);
-          float rHead = length((p - headCenter) * vec2(0.72, 1.05));
-          float shoreWave = sin(rHead * 1.6 - uTime * 2.2 + n1 * 4.0);
-          float shoreFoam = smoothstep(32.0, 26.5, rHead) * smoothstep(21.0, 25.0, rHead) *
-                            smoothstep(0.2, 0.85, shoreWave + n2 * 0.5);
-
-          float totalFoam = clamp(crest * 0.35 + leftSurf + shoreFoam * 0.85, 0.0, 1.0);
-          waterCol = mix(waterCol, vec3(0.86, 0.91, 0.97), totalFoam);
-
-          // Crisp sun glints
-          vec3 H = normalize(uSunDir + V);
-          float spec = pow(max(dot(N, H), 0.0), 140.0) * 0.9;
-          waterCol += vec3(0.95, 0.98, 1.0) * spec * smoothstep(700.0, 50.0, dist);
-
-          // Horizon atmospheric blend
-          float fogFactor = smoothstep(350.0, 1180.0, dist);
-          waterCol = mix(waterCol, vec3(0.52, 0.67, 0.85), fogFactor);
-
-          gl_FragColor = vec4(waterCol, 1.0);
-        }
-      `
-    });
-
-    const ocean = new THREE.Mesh(oceanGeo, oceanMat);
-    ocean.position.y = -0.35;
-    scene.add(ocean);
-
-    // =========================================================================
-    // 5. DISTANT NOVA SCOTIA COASTLINE (Right Peninsula & Far Left Island)
-    // =========================================================================
-    function buildDistantCoastline() {
-      const coastMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uTime: skyUniforms.uTime
-        },
-        vertexShader: /* glsl */ `
-          varying vec3 vWorldPos;
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            vec4 wp = modelMatrix * vec4(position, 1.0);
-            vWorldPos = wp.xyz;
-            gl_Position = projectionMatrix * viewMatrix * wp;
-          }
-        `,
-        fragmentShader: /* glsl */ `
-          varying vec3 vWorldPos;
-          varying vec2 vUv;
-          uniform float uTime;
-
-          float hash(vec2 p) {
-            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-          }
-          float noise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            f = f * f * (3.0 - 2.0 * f);
-            return mix(
-              mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-              mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-              f.y
-            );
-          }
-
-          void main() {
-            float h = max(vWorldPos.y + 0.35, 0.0);
-            float n = noise(vWorldPos.xz * 0.035) * 0.6 + noise(vWorldPos.xz * 0.12) * 0.4;
-
-            // Atmospheric blue-slate coastal hills matching right horizon in reference
-            vec3 hillBase = vec3(0.28, 0.38, 0.51);
-            vec3 hillHigh = vec3(0.35, 0.45, 0.59);
-            vec3 col = mix(hillBase, hillHigh, clamp(h * 0.06 + n * 0.35, 0.0, 1.0));
-
-            // Distant snowy/rocky shoreline specks & surf line right at water edge
-            float shoreLine = smoothstep(2.1, 0.25, h);
-            float surf = shoreLine * smoothstep(0.32, 0.68, noise(vec2(vWorldPos.x * 0.12 + uTime * 0.2, vWorldPos.z * 0.12)));
-            col = mix(col, vec3(0.84, 0.89, 0.96), surf * 0.88);
-
-            gl_FragColor = vec4(col, 1.0);
-          }
-        `
-      });
-
-      // Right distant peninsula across St. Margarets Bay
-      const segsX = 160, segsZ = 24;
-      const rightGeo = new THREE.PlaneGeometry(780, 90, segsX, segsZ);
-      rightGeo.rotateX(-Math.PI / 2);
-      const pos = rightGeo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const lx = pos.getX(i); // -390 to +390
-        const lz = pos.getZ(i); // -45 to +45
-        const u = (lx + 390) / 780; // 0 (left tip near center) to 1 (far right)
-        const v = 1.0 - Math.abs(lz / 45.0);
-        const ridge = Math.max(0, Math.sin(u * Math.PI * 0.95));
-        // Higher rounded hump around u = 0.26 (matches hill at x ~ 73% in photo)
-        const mainHill = Math.exp(-Math.pow((u - 0.24) * 5.2, 2.0)) * 13.5;
-        const secondHill = Math.exp(-Math.pow((u - 0.68) * 3.5, 2.0)) * 8.2;
-        const baseRidge = smoothstepJS(0.02, 0.12, u) * 5.8;
-        const micro = Math.sin(u * 42.0) * 0.6 + Math.cos(u * 95.0) * 0.3;
-        const y = (baseRidge + mainHill + secondHill + micro) * Math.pow(Math.max(v, 0), 0.75) - 0.55;
-        pos.setY(i, y);
-      }
-      rightGeo.computeVertexNormals();
-      const rightCoast = new THREE.Mesh(rightGeo, coastMat);
-      rightCoast.position.set(420, 0, -680);
-      rightCoast.rotation.y = -0.16;
-      scene.add(rightCoast);
-
-      // Faint low distant island strip on left horizon (around x = 20% in reference)
-      const leftGeo = new THREE.PlaneGeometry(95, 25, 40, 8);
-      leftGeo.rotateX(-Math.PI / 2);
-      const lPos = leftGeo.attributes.position;
-      for (let i = 0; i < lPos.count; i++) {
-        const lx = lPos.getX(i);
-        const lz = lPos.getZ(i);
-        const u = 1.0 - Math.pow(lx / 47.5, 2.0);
-        const v = 1.0 - Math.abs(lz / 12.5);
-        lPos.setY(i, Math.max(0, u * v) * 2.4 - 0.45);
-      }
-      leftGeo.computeVertexNormals();
-      const leftIsland = new THREE.Mesh(leftGeo, coastMat);
-      leftIsland.position.set(-225, 0, -740);
-      scene.add(leftIsland);
-    }
-
-    function smoothstepJS(edge0, edge1, x) {
-      const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-      return t * t * (3 - 2 * t);
-    }
-
-    buildDistantCoastline();
-
-    // =========================================================================
-    // 6. DETERMINISTIC NOISE & PROCEDURAL GRANITE / SNOW / PATH TEXTURES
+    // 1. DETERMINISTIC NOISE UTILITIES (CPU — matches terrain & boulders)
     // =========================================================================
     function hash2(x, y) {
-      const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
-      return s - Math.floor(s);
+      const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+      return h - Math.floor(h);
     }
-
-    function noise2D(x, y) {
-      const ix = Math.floor(x);
-      const iy = Math.floor(y);
-      const fx = x - ix;
-      const fy = y - iy;
+    function valueNoise2D(x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      const fx = x - ix, fy = y - iy;
       const ux = fx * fx * (3.0 - 2.0 * fx);
       const uy = fy * fy * (3.0 - 2.0 * fy);
       const a = hash2(ix, iy);
@@ -482,1158 +232,1331 @@
       const d = hash2(ix + 1, iy + 1);
       return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
     }
-
     function fbm2D(x, y, octaves = 5) {
-      let v = 0.0;
-      let a = 0.5;
-      let px = x, py = y;
+      let val = 0.0, amp = 0.5, freq = 1.0;
       for (let i = 0; i < octaves; i++) {
-        v += a * noise2D(px, py);
-        const nx = px * 1.62 + py * 1.18;
-        const ny = -px * 1.18 + py * 1.62;
-        px = nx;
-        py = ny;
-        a *= 0.5;
+        val += amp * valueNoise2D(x * freq, y * freq);
+        freq *= 2.03;
+        amp *= 0.5;
       }
-      return v;
+      return val;
+    }
+    function ridged2D(x, y, octaves = 4) {
+      let val = 0.0, amp = 0.5, freq = 1.0;
+      for (let i = 0; i < octaves; i++) {
+        const n = 1.0 - Math.abs(valueNoise2D(x * freq, y * freq) * 2.0 - 1.0);
+        val += amp * n * n;
+        freq *= 2.1;
+        amp *= 0.48;
+      }
+      return val;
+    }
+    function smoothstep(edge0, edge1, x) {
+      const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+      return t * t * (3 - 2 * t);
     }
 
-    function createProceduralTextures() {
-      // 1. High-resolution salt-and-pepper Devonian granite texture + bump
-      const size = 1024;
-      const gCanvas = document.createElement('canvas');
-      gCanvas.width = size;
-      gCanvas.height = size;
-      const gCtx = gCanvas.getContext('2d');
-      const imgData = gCtx.createImageData(size, size);
-      const data = imgData.data;
+    // Curved icy path centerline X(z) matching the diagonal melt track in the photo
+    function getPathCenterX(z) {
+      // Goes from bottom-right (x ≈ 14 at z = 28) curving toward center-left (x ≈ -2 at z = 4) then up toward lighthouse (x ≈ 2.2 at z = -14)
+      const t = (z + 18.0) / 48.0; // 0 near lighthouse, 1 near foreground
+      return 1.8 - Math.sin(t * Math.PI * 1.15) * 4.8 + Math.pow(Math.max(0, t - 0.32), 1.85) * 24.0;
+    }
 
-      const bCanvas = document.createElement('canvas');
-      bCanvas.width = size;
-      bCanvas.height = size;
-      const bCtx = bCanvas.getContext('2d');
-      const bImg = bCtx.createImageData(size, size);
-      const bData = bImg.data;
+    // =========================================================================
+    // 2. TERRAIN HEIGHT FUNCTION — Peggy's Cove Glacial Granite Promontory
+    // =========================================================================
+    const LIGHTHOUSE_POS = new THREE.Vector3(2.4, 0, -21.0);
 
+    function getTerrainHeight(x, z) {
+      // Main whaleback granite peninsula elongated along Z, gently curving
+      const dxL = (x - 1.2) / 30.0;
+      const dzL = (z + 2.0) / 44.0;
+      const distSq = dxL * dxL + dzL * dzL;
+
+      // Broad coastal dome rising cleanly above sea level (y = 0)
+      let baseDome = 6.2 * Math.exp(-distSq * 1.05) - 1.65;
+
+      // Elevated plateau right under the lighthouse (so base sits slightly above horizon)
+      const lhDist = Math.hypot((x - LIGHTHOUSE_POS.x) * 0.95, (z - LIGHTHOUSE_POS.z) * 1.05);
+      const lhMound = 2.65 * Math.exp(-(lhDist * lhDist) / 210.0);
+      baseDome += lhMound;
+
+      // Foreground rocky granite shelf framing the bottom-left and bottom-center
+      const fgDist = Math.hypot((x + 4.5) * 0.65, (z - 27.5) * 0.85);
+      const fgRidge = 2.15 * Math.exp(-(fgDist * fgDist) / 145.0);
+      baseDome += fgRidge;
+
+      // Left-side rugged boulder ridge dropping toward the left bay
+      const leftShelf = 1.65 * Math.exp(-Math.pow((x + 19.0) / 11.0, 2.0) - Math.pow((z - 1.0) / 22.0, 2.0));
+      baseDome += leftShelf;
+
+      // Gentle smooth dome sloping down to the right ocean (just like the photo's right flank)
+      const rightFlank = 1.3 * Math.exp(-Math.pow((x - 16.0) / 13.0, 2.0) - Math.pow((z + 10.0) / 18.0, 2.0));
+      baseDome += rightFlank;
+
+      // Glacial bedrock undulations (smooth whaleback swells)
+      const nLarge = (fbm2D(x * 0.045 + 11.3, z * 0.045 + 7.1, 4) - 0.5) * 2.1;
+      const nMed = (fbm2D(x * 0.13 + 3.7, z * 0.13 - 4.2, 4) - 0.5) * 0.72;
+
+      // Glacial fissures / cracks carved into the foreground & midground granite
+      const crackNoise = ridged2D(x * 0.14 + 2.1, z * 0.11 - 5.4, 3);
+      const crackGroove = -Math.pow(Math.max(0, crackNoise - 0.56) * 2.2, 2.2) * 0.95;
+
+      // Extra rugged fracture texture in the close foreground
+      const fgMask = smoothstep(8.0, 28.0, z);
+      const fgDetail = (fbm2D(x * 0.34, z * 0.34, 3) - 0.5) * 0.52 * fgMask;
+      const fgCracks = -Math.pow(Math.max(0, ridged2D(x * 0.28 + 8.0, z * 0.24, 3) - 0.6) * 2.4, 2.0) * 0.75 * fgMask;
+
+      // Flatten slightly immediately beneath the lighthouse foundation
+      const flatPad = smoothstep(2.6, 6.2, lhDist);
+
+      let h = baseDome + (nLarge + nMed + crackGroove + fgDetail + fgCracks) * (0.28 + 0.72 * flatPad);
+
+      // Subtle depression along the curving wet/icy footpath
+      if (z > -16.0 && z < 32.0) {
+        const px = getPathCenterX(z);
+        const pDist = Math.abs(x - px);
+        const pathDip = Math.exp(-(pDist * pDist) / 2.6) * 0.24;
+        h -= pathDip;
+      }
+
+      // Smooth sea-floor dropoff
+      if (h < -0.5) {
+        h = -0.5 + (h + 0.5) * 0.75;
+      }
+      return h;
+    }
+
+    LIGHTHOUSE_POS.y = getTerrainHeight(LIGHTHOUSE_POS.x, LIGHTHOUSE_POS.z) - 0.15;
+
+    // =========================================================================
+    // 3. PROCEDURAL NORMAL & BUMP MAPS (Granite + Painted Concrete)
+    // =========================================================================
+    function createNormalTexture(size, scale, octaves, strength, speckle = 0.0) {
+      const heights = new Float32Array(size * size);
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
-          const idx = (y * size + x) * 4;
-          // Tileable frequencies
-          const u = x / size;
-          const v = y / size;
-          const nMacro = noise2D(u * 16, v * 16) * 0.5 + noise2D(u * 32, v * 32) * 0.3 + noise2D(u * 64, v * 64) * 0.2;
-          const grain1 = hash2(x * 0.9, y * 0.9);
-          const grain2 = hash2(x * 0.45 + 17, y * 0.45 + 31);
-
-          // Salt & pepper biotite/feldspar crystal speckles
-          let speck = 0.52 + (nMacro - 0.5) * 0.28;
-          if (grain1 < 0.16) speck -= 0.24; // dark biotite mica flake
-          else if (grain1 > 0.83) speck += 0.18; // bright quartz/feldspar crystal
-          speck += (grain2 - 0.5) * 0.14;
-
-          // Subtle glacial striation micro-grooves
-          const striation = Math.sin((u * 38 + v * 14 + nMacro * 2.5) * Math.PI * 2) * 0.04;
-          const val = Math.max(0, Math.min(1, speck + striation));
-
-          data[idx]     = Math.round(val * 232);
-          data[idx + 1] = Math.round(val * 238);
-          data[idx + 2] = Math.round(val * 246);
-          data[idx + 3] = 255;
-
-          const bumpVal = Math.max(0, Math.min(255, Math.round((nMacro * 0.65 + grain2 * 0.35 + striation) * 255)));
-          bData[idx] = bData[idx + 1] = bData[idx + 2] = bumpVal;
-          bData[idx + 3] = 255;
-        }
-      }
-      gCtx.putImageData(imgData, 0, 0);
-      bCtx.putImageData(bImg, 0, 0);
-
-      const graniteMap = new THREE.CanvasTexture(gCanvas);
-      graniteMap.wrapS = graniteMap.wrapT = THREE.RepeatWrapping;
-      graniteMap.repeat.set(14, 14);
-      graniteMap.colorSpace = THREE.SRGBColorSpace;
-      graniteMap.anisotropy = 8;
-
-      const graniteBump = new THREE.CanvasTexture(bCanvas);
-      graniteBump.wrapS = graniteBump.wrapT = THREE.RepeatWrapping;
-      graniteBump.repeat.set(14, 14);
-      graniteBump.anisotropy = 8;
-
-      return { graniteMap, graniteBump };
-    }
-
-    const procTex = createProceduralTextures();
-
-    // =========================================================================
-    // 7. COASTAL GRANITE HEADLAND TOPOGRAPHY & CUSTOM SHADER MATERIAL
-    // =========================================================================
-    function distToSegment(px, pz, ax, az, bx, bz) {
-      const vx = bx - ax, vz = bz - az;
-      const wx = px - ax, wz = pz - az;
-      const c1 = vx * wx + vz * wz;
-      if (c1 <= 0) return Math.hypot(px - ax, pz - az);
-      const c2 = vx * vx + vz * vz;
-      if (c2 <= c1) return Math.hypot(px - bx, pz - bz);
-      const b = c1 / c2;
-      return Math.hypot(px - (ax + b * vx), pz - (az + b * vz));
-    }
-
-    function getWalkwayDist(x, z) {
-      // Main diagonal concrete walkway visible in reference photo:
-      // Runs from bottom-right bend (5.3, 13.6) diagonally up-left to (-1.3, 3.2),
-      // then curves up toward the lighthouse base (1.2, -15.5), plus the foreground turn-down spur (5.1, 17.5)
-      const d1 = distToSegment(x, z, 5.15, 17.4, 5.35, 13.6);
-      const d2 = distToSegment(x, z, 5.35, 13.6, -1.35, 3.2);
-      const d3 = distToSegment(x, z, -1.35, 3.2, 1.25, -14.8);
-      return Math.min(d1, d2, d3);
-    }
-
-    function getTerrainData(x, z) {
-      // 1. Broad oval granite headland whaleback dome rising out of the Atlantic
-      const cx = 1.5, cz = -15.5;
-      const dx = (x - cx) / 24.5;
-      const dz = (z - cz) / 21.0;
-      const r2 = dx * dx + dz * dz;
-      let dome = 2.65 * Math.exp(-r2 * 1.18);
-
-      // Extend main ridge forward to camera so foreground connects seamlessly
-      const ridgeX = x / 18.5;
-      const ridgeZ = (z - 6.0) / 24.0;
-      const forwardSaddle = 1.48 * Math.exp(-(ridgeX * ridgeX * 0.85 + ridgeZ * ridgeZ * 0.95));
-
-      // Steep drop-off behind lighthouse (-z) and into ocean on far left/right
-      const seaDrop = smoothstepJS(32.0, 21.5, Math.hypot((x - 1.0) * 0.78, (z - 1.0) * 0.68));
-      let h = Math.max(dome, forwardSaddle) * seaDrop - 0.55;
-
-      // Flatten lighthouse plinth area around (x = 1.34, z = -18.0) at y = 2.57
-      const dLight = Math.hypot(x - 1.34, z + 18.0);
-      const lightPad = Math.exp(-dLight * dLight * 0.085);
-      h = h * (1.0 - lightPad) + 2.57 * lightPad;
-
-      // Right crest slope of glaciated granite whaleback (x = 3 to 16, z = -19 to -8)
-      const rightWhaleback = Math.exp(-Math.pow((x - 7.5) / 7.5, 2.0) - Math.pow((z + 14.5) / 6.5, 2.0)) * 1.15;
-      h += rightWhaleback;
-
-      // Left rocky ridge slope (x = -14 to -3, z = -16 to +2)
-      const leftRidge = Math.exp(-Math.pow((x + 7.5) / 6.8, 2.0) - Math.pow((z + 7.5) / 9.5, 2.0)) * 0.92;
-      h += leftRidge;
-
-      // 2. Prominent Foreground Granite Outcrop Humps & Deep Glacial Fissures (z = 13.5 to 26.0)
-      const fgMask = smoothstepJS(12.2, 16.5, z) * smoothstepJS(27.2, 24.2, z);
-      // Center-left foreground hero granite hump (x = -2.8 to +1.7, z = 15 to 25)
-      const humpCenter = Math.exp(-Math.pow((x + 0.35) / 2.45, 2.0) - Math.pow((z - 20.2) / 4.2, 2.0)) * 0.72;
-      // Mid-left foreground granite hump (x = -6.5 to -2.2, z = 15.5 to 25)
-      const humpLeft = Math.exp(-Math.pow((x + 4.35) / 2.6, 2.0) - Math.pow((z - 19.8) / 4.5, 2.0)) * 0.68;
-      // Far-left foreground granite ledges (x = -11 to -6.5, z = 14 to 24)
-      const humpFarLeft = Math.exp(-Math.pow((x + 8.4) / 2.8, 2.0) - Math.pow((z - 18.8) / 4.2, 2.0)) * 0.56;
-
-      // Deep diagonal glacial crevices cutting through the foreground granite (as in reference photo)
-      const c1Dist = Math.abs((x + 1.05) - (z - 19.5) * 0.14 + Math.sin(z * 1.3) * 0.12);
-      const crevice1 = Math.exp(-c1Dist * c1Dist * 18.0) * smoothstepJS(15.2, 17.5, z) * smoothstepJS(2.0, -3.2, x);
-
-      const c2Dist = Math.abs((x + 3.65) + (z - 19.5) * 0.26 + Math.cos(z * 1.1) * 0.15);
-      const crevice2 = Math.exp(-c2Dist * c2Dist * 14.0) * smoothstepJS(15.0, 17.2, z) * smoothstepJS(-1.5, -7.0, x);
-
-      const c3Dist = Math.abs((x + 6.8) + (z - 19.0) * 0.32);
-      const crevice3 = Math.exp(-c3Dist * c3Dist * 12.0) * smoothstepJS(14.5, 16.8, z);
-
-      const totalCrevice = Math.min(1.0, crevice1 + crevice2 * 0.9 + crevice3 * 0.8);
-      const fgRockHeight = (humpCenter + humpLeft + humpFarLeft) * (1.0 - totalCrevice * 0.78);
-      h += fgRockHeight * fgMask;
-
-      // Micro-relief granite undulations
-      const nMed = fbm2D(x * 0.35 + 11.3, z * 0.35 + 7.1, 4);
-      const nFine = fbm2D(x * 1.25, z * 1.25, 3);
-      h += (nMed - 0.5) * 0.24 * seaDrop + (nFine - 0.5) * 0.06 * seaDrop;
-
-      // 3. Smooth Snowdrift on Bottom-Right Foreground (x = 1.9 to 11.5, z = 14 to 25)
-      const rightSnowZone = smoothstepJS(1.4, 3.1, x) * smoothstepJS(12.5, 16.0, z);
-      const driftMound = Math.exp(-Math.pow((x - 4.8) / 4.8, 2.0) - Math.pow((z - 19.5) / 5.5, 2.0)) * 0.26;
-      h = h * (1.0 - rightSnowZone * 0.45) + (0.82 + driftMound) * rightSnowZone * 0.45;
-
-      // Boot footprints / ski-like tracks in bottom-right snow (x = 4.6 to 7.8, z = 16.5 to 25.0)
-      const track1X = 5.45 + (z - 17.0) * 0.14 + Math.sin(z * 0.8) * 0.12;
-      const track2X = 6.55 + (z - 17.0) * 0.22 + Math.cos(z * 0.7) * 0.12;
-      const dTrack1 = Math.abs(x - track1X);
-      const dTrack2 = Math.abs(x - track2X);
-      const stepMod = 0.55 + 0.45 * Math.sin(z * 5.2);
-      const footprintDepth = (Math.exp(-dTrack1 * dTrack1 * 28.0) + Math.exp(-dTrack2 * dTrack2 * 24.0)) *
-                             smoothstepJS(16.0, 18.0, z) * smoothstepJS(25.5, 24.0, z) * stepMod;
-      h -= footprintDepth * 0.065;
-
-      // Concrete walkway slight channel depression & raised curb edges
-      const dPath = getWalkwayDist(x, z);
-      const pathWidth = z > 13.4 ? 0.38 : 0.62;
-      if (dPath < pathWidth + 0.35 && z > -13.5 && z < 17.8) {
-        const inPath = smoothstepJS(pathWidth + 0.12, pathWidth - 0.08, dPath);
-        h -= inPath * 0.045;
-      }
-
-      return { h, totalCrevice, footprintDepth, dPath };
-    }
-
-    function createCoastalTerrainMaterial() {
-      const mat = new THREE.MeshStandardMaterial({
-        map: procTex.graniteMap,
-        bumpMap: procTex.graniteBump,
-        bumpScale: 0.065,
-        roughness: 0.78,
-        metalness: 0.04
-      });
-
-      mat.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            '#include <common>',
-            /* glsl */ `
-            #include <common>
-            varying vec3 vWorldPosition;
-            varying vec3 vWorldNormal;
-            `
-          )
-          .replace(
-            '#include <beginnormal_vertex>',
-            /* glsl */ `
-            #include <beginnormal_vertex>
-            vWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);
-            `
-          )
-          .replace(
-            '#include <worldpos_vertex>',
-            /* glsl */ `
-            #include <worldpos_vertex>
-            vWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
-            `
-          );
-
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            '#include <common>',
-            /* glsl */ `
-            #include <common>
-            varying vec3 vWorldPosition;
-            varying vec3 vWorldNormal;
-
-            float hashG(vec2 p) {
-              return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-            }
-            float noiseG(vec2 p) {
-              vec2 i = floor(p);
-              vec2 f = fract(p);
-              f = f * f * (3.0 - 2.0 * f);
-              return mix(
-                mix(hashG(i), hashG(i + vec2(1.0, 0.0)), f.x),
-                mix(hashG(i + vec2(0.0, 1.0)), hashG(i + vec2(1.0, 1.0)), f.x),
-                f.y
-              );
-            }
-            float fbmG(vec2 p) {
-              float v = 0.0;
-              float a = 0.5;
-              mat2 m = mat2(0.8, 0.6, -0.6, 0.8);
-              for (int i = 0; i < 4; i++) {
-                v += a * noiseG(p);
-                p = m * p * 2.04;
-                a *= 0.5;
-              }
-              return v;
-            }
-            float segDist(vec2 p, vec2 a, vec2 b) {
-              vec2 pa = p - a, ba = b - a;
-              float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-              return length(pa - ba * h);
-            }
-            `
-          )
-          .replace(
-            '#include <map_fragment>',
-            /* glsl */ `
-            #include <map_fragment>
-            vec2 wp = vWorldPosition.xz;
-            float nMacro = fbmG(wp * 0.28);
-            float nDetail = fbmG(wp * 1.35 + vec2(4.2, -3.1));
-            float nFine = noiseG(wp * 6.5);
-            float grain = hashG(floor(wp * 45.0));
-
-            // 1. Devonian Granite Base Color (salt-and-pepper crystalline grey)
-            vec3 graniteBase = diffuseColor.rgb * vec3(0.68, 0.70, 0.73);
-            graniteBase *= (0.84 + 0.32 * nDetail);
-            // Dark glacial crack network on exposed rock
-            float crackPattern = abs(noiseG(wp * 0.95 + nMacro * 1.4) - 0.5);
-            float crackLine = smoothstep(0.045, 0.008, crackPattern);
-            graniteBase = mix(graniteBase, vec3(0.22, 0.24, 0.27), crackLine * 0.65);
-
-            // Weathered olive-brown coastal moss / lichen in foreground & low rock hollows
-            float fgZone = smoothstep(7.0, 18.0, wp.y);
-            float mossNoise = smoothstep(0.46, 0.72, fbmG(wp * 0.82 + vec2(9.1, 2.4)));
-            float leftForeMoss = smoothstep(1.5, -4.5, wp.x) * fgZone * mossNoise;
-            float midTuftPatch = smoothstep(0.58, 0.78, fbmG(wp * 0.55)) * smoothstep(-8.0, 14.0, wp.y) * 0.55;
-            vec3 mossCol = mix(vec3(0.35, 0.31, 0.22), vec3(0.46, 0.39, 0.27), nFine);
-            graniteBase = mix(graniteBase, mossCol, clamp(leftForeMoss * 0.78 + midTuftPatch * 0.45, 0.0, 0.82));
-
-            // 2. Snow Blanket Coverage (matching reference photo snow distribution)
-            float flatness = smoothstep(0.58, 0.88, vWorldNormal.y);
-            // Midground snowfield (z from -12 to +15) + right foreground snowbank (x > 1.8, z > 12)
-            float midSnow = smoothstep(-14.5, -7.5, wp.y) * smoothstep(17.5, 11.5, wp.y);
-            float rightFgSnow = smoothstep(1.3, 2.6, wp.x) * smoothstep(10.0, 15.5, wp.y);
-            // Snow pockets trapped in foreground granite crevices & leeward right slopes
-            float leewardSlope = smoothstep(-0.15, 0.45, vWorldNormal.x);
-            float fgCreviceSnow = smoothstep(13.0, 16.5, wp.y) * smoothstep(-9.0, 2.2, wp.x) *
-                                  smoothstep(0.44, 0.64, nMacro * 0.65 + leewardSlope * 0.55);
-
-            // Exposed rock whalebacks on upper crest (z < -10, x > 1.5 or x < -2.0) stay mostly bare granite
-            float crestBare = smoothstep(-9.5, -14.0, wp.y) * (smoothstep(1.2, 4.5, wp.x) + smoothstep(-1.5, -5.0, wp.x));
-            // Exposed foreground granite humps (x from -9.5 to +1.5, z from 15.5 to 25)
-            float fgHump1 = exp(-pow((wp.x + 0.35) / 2.1, 2.0) - pow((wp.y - 20.2) / 3.8, 2.0));
-            float fgHump2 = exp(-pow((wp.x + 4.35) / 2.2, 2.0) - pow((wp.y - 19.8) / 4.0, 2.0));
-            float fgHump3 = exp(-pow((wp.x + 8.2) / 2.4, 2.0) - pow((wp.y - 18.8) / 3.8, 2.0));
-            float fgBareRock = clamp((fgHump1 + fgHump2 + fgHump3) * 1.25, 0.0, 1.0);
-
-            // Midground exposed flat granite slabs peeking through snow (as in reference photo)
-            float slabPatches = smoothstep(0.54, 0.72, fbmG(wp * 0.38 + vec2(1.7, 5.3)));
-            float leftMidSlabs = smoothstep(-1.0, -7.5, wp.x) * smoothstep(-3.0, 8.0, wp.y) * 0.55;
-
-            float snowScore = flatness * (midSnow * (0.85 - slabPatches * 0.52 - leftMidSlabs) + rightFgSnow * 1.15 + fgCreviceSnow * 0.85);
-            snowScore -= crestBare * 0.85 + fgBareRock * (0.92 - leewardSlope * 0.38);
-            snowScore += (nDetail - 0.5) * 0.28 + (nFine - 0.5) * 0.12;
-            float snowMask = smoothstep(0.32, 0.48, snowScore);
-
-            // 3. Concrete / Icy Walkway Path Cutting Diagonally Across Midground
-            float dP1 = segDist(wp, vec2(5.15, 17.4), vec2(5.35, 13.6));
-            float dP2 = segDist(wp, vec2(5.35, 13.6), vec2(-1.35, 3.2));
-            float dP3 = segDist(wp, vec2(-1.35, 3.2), vec2(1.25, -14.8));
-            float dPath = min(dP1, min(dP2, dP3));
-            float pWidth = wp.y > 13.4 ? 0.32 : 0.56;
-            float pathMask = smoothstep(pWidth + 0.08, pWidth - 0.08, dPath) *
-                             smoothstep(-13.5, -6.0, wp.y) * smoothstep(18.0, 16.8, wp.y);
-            // Parallel wheel-track / curb stripes along the diagonal path
-            float trackStripe = smoothstep(0.12, 0.28, abs(dPath - pWidth * 0.52));
-            vec3 pathCol = mix(vec3(0.42, 0.40, 0.36), vec3(0.56, 0.55, 0.51), trackStripe * 0.7 + nDetail * 0.3);
-
-            // Refrozen blue-grey ice crust patches beside path & in midground hollows
-            float icePatch = smoothstep(0.62, 0.76, fbmG(wp * 0.48 + vec2(8.3, -2.1))) * midSnow * (1.0 - pathMask);
-
-            // Crisp sunlit snow color with subtle crystalline diamond sparkle
-            float sparkle = step(0.965, grain) * 0.18;
-            vec3 snowCol = vec3(0.93, 0.96, 1.0) + sparkle;
-            vec3 iceCol  = vec3(0.64, 0.72, 0.82);
-            vec3 finalSnow = mix(snowCol, iceCol, icePatch * 0.65);
-
-            // Combine granite, snow, and walkway
-            snowMask *= (1.0 - pathMask * 0.92);
-            vec3 surfaceCol = mix(graniteBase, pathCol, pathMask * 0.88);
-            surfaceCol = mix(surfaceCol, finalSnow, snowMask);
-
-            diffuseColor.rgb = surfaceCol;
-            `
-          )
-          .replace(
-            '#include <roughnessmap_fragment>',
-            /* glsl */ `
-            #include <roughnessmap_fragment>
-            roughnessFactor = mix(0.82, 0.62, snowMask);
-            roughnessFactor = mix(roughnessFactor, 0.35, pathMask * 0.7 + icePatch * 0.65);
-            `
-          );
-      };
-
-      return mat;
-    }
-
-    const coastalTerrainMat = createCoastalTerrainMaterial();
-
-    // Build high-resolution displaced headland terrain mesh
-    function buildHeadlandTerrain() {
-      const geo = new THREE.PlaneGeometry(76, 68, 280, 260);
-      geo.rotateX(-Math.PI / 2);
-      const pos = geo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const z = pos.getZ(i) - 4.0; // shift center to z = -4
-        pos.setZ(i, z);
-        const { h } = getTerrainData(x, z);
-        pos.setY(i, h);
-      }
-      geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, coastalTerrainMat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-      return mesh;
-    }
-
-    buildHeadlandTerrain();
-
-    // =========================================================================
-    // 8. GLACIATED GRANITE BOULDERS, COASTAL CLIFF BLOCKS & OUTCROP SLABS
-    // =========================================================================
-    function createBoulderMaterial() {
-      const mat = new THREE.MeshStandardMaterial({
-        map: procTex.graniteMap,
-        bumpMap: procTex.graniteBump,
-        bumpScale: 0.055,
-        roughness: 0.76,
-        metalness: 0.04,
-        vertexColors: true
-      });
-
-      mat.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            '#include <common>',
-            /* glsl */ `
-            #include <common>
-            varying vec3 vWPos;
-            varying vec3 vWNorm;
-            `
-          )
-          .replace(
-            '#include <beginnormal_vertex>',
-            /* glsl */ `
-            #include <beginnormal_vertex>
-            vWNorm = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);
-            `
-          )
-          .replace(
-            '#include <worldpos_vertex>',
-            /* glsl */ `
-            #include <worldpos_vertex>
-            vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-            `
-          );
-
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            '#include <common>',
-            /* glsl */ `
-            #include <common>
-            varying vec3 vWPos;
-            varying vec3 vWNorm;
-            float hashB(vec2 p) {
-              return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-            }
-            float noiseB(vec2 p) {
-              vec2 i = floor(p);
-              vec2 f = fract(p);
-              f = f * f * (3.0 - 2.0 * f);
-              return mix(
-                mix(hashB(i), hashB(i + vec2(1.0, 0.0)), f.x),
-                mix(hashB(i + vec2(0.0, 1.0)), hashB(i + vec2(1.0, 1.0)), f.x),
-                f.y
-              );
-            }
-            `
-          )
-          .replace(
-            '#include <map_fragment>',
-            /* glsl */ `
-            #include <map_fragment>
-            // Vertex color channels: R = tone tint, G = seam/crack darkening, B = snow cap weight
-            float toneTint = vColor.r;
-            float seamDark = vColor.g;
-            float snowWeight = vColor.b;
-
-            float n1 = noiseB(vWPos.xy * 1.8 + vWPos.z * 1.1);
-            float n2 = noiseB(vWPos.xz * 4.5);
-
-            vec3 rockCol = diffuseColor.rgb * vec3(0.73, 0.75, 0.78) * (0.78 + 0.38 * toneTint);
-            rockCol *= (0.88 + 0.24 * n1);
-            // Darken glacial cleavage seam
-            rockCol = mix(rockCol, vec3(0.18, 0.21, 0.26), seamDark * 0.78);
-
-            // Optional snow crust on flat top surfaces of low slabs
-            float topSnow = smoothstep(0.72, 0.92, vWNorm.y + (n2 - 0.5) * 0.18) * snowWeight;
-            diffuseColor.rgb = mix(rockCol, vec3(0.93, 0.96, 1.0), clamp(topSnow, 0.0, 1.0));
-            `
-          );
-      };
-
-      return mat;
-    }
-
-    const boulderMat = createBoulderMaterial();
-
-    function createGlaciatedBoulder(rx, ry, rz, seed, options = {}) {
-      const {
-        seamX = null,
-        angular = 0.22,
-        snowCap = 0.0,
-        tone = 0.62
-      } = options;
-
-      const geo = new THREE.IcosahedronGeometry(1.0, 4);
-      const pos = geo.attributes.position;
-      const colors = new Float32Array(pos.count * 3);
-
-      for (let i = 0; i < pos.count; i++) {
-        let vx = pos.getX(i);
-        let vy = pos.getY(i);
-        let vz = pos.getZ(i);
-
-        // Flatten underside so boulder sits naturally embedded in bedrock
-        if (vy < -0.2) {
-          vy = -0.2 + (vy + 0.2) * 0.38;
-        }
-        // Slightly dome/pillow the top for classic glaciated Peggy's Cove granite
-        const nA = fbm2D(vx * 1.4 + seed * 7.3, vz * 1.4 + vy * 1.1 + seed * 3.9, 4);
-        const nB = noise2D(vx * 3.2 - seed * 2.1, vy * 3.2 + vz * 2.7);
-
-        // Cleavage planes (glacial plucking facets on right/back sides)
-        const facet = Math.sin(vx * 2.4 + seed) * Math.cos(vz * 2.1 - seed * 0.7) * angular;
-        const disp = 0.86 + (nA - 0.5) * 0.34 + (nB - 0.5) * 0.09 + facet;
-
-        vx *= rx * disp;
-        vy *= ry * disp;
-        vz *= rz * disp;
-
-        // Optional vertical cleavage crack (e.g. on Hero Pillow Boulder below lighthouse)
-        let seamVal = 0.0;
-        if (seamX !== null) {
-          const dSeam = Math.abs(vx - seamX * rx + Math.sin(vy * 2.2) * 0.08 * rx);
-          if (dSeam < 0.14 * rx) {
-            const pinch = 1.0 - dSeam / (0.14 * rx);
-            const groove = pinch * pinch;
-            vy -= groove * 0.11 * ry;
-            vz -= groove * 0.14 * rz;
-            seamVal = groove;
+          // Seamless periodic sampling via cosine/sine blending or wrapped noise
+          const u = x / size, v = y / size;
+          // Tileable 2D value noise using modular grid
+          let val = 0, amp = 0.5, freq = scale;
+          for (let o = 0; o < octaves; o++) {
+            const gx = u * freq, gy = v * freq;
+            const ix = Math.floor(gx), iy = Math.floor(gy);
+            const fx = gx - ix, fy = gy - iy;
+            const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+            const ix0 = ((ix % freq) + freq) % freq;
+            const iy0 = ((iy % freq) + freq) % freq;
+            const ix1 = (ix0 + 1) % freq;
+            const iy1 = (iy0 + 1) % freq;
+            const a = hash2(ix0 + o * 31, iy0 + o * 17);
+            const b = hash2(ix1 + o * 31, iy0 + o * 17);
+            const c = hash2(ix0 + o * 31, iy1 + o * 17);
+            const d = hash2(ix1 + o * 31, iy1 + o * 17);
+            const n = a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+            val += n * amp;
+            freq *= 2;
+            amp *= 0.5;
           }
+          if (speckle > 0) {
+            val += (hash2(x * 1.37, y * 2.13) - 0.5) * speckle;
+          }
+          heights[y * size + x] = val;
         }
-
-        pos.setXYZ(i, vx, vy, vz);
-
-        colors[i * 3]     = Math.max(0.1, Math.min(1.0, tone + (nA - 0.5) * 0.25));
-        colors[i * 3 + 1] = seamVal;
-        colors[i * 3 + 2] = snowCap;
       }
 
-      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, boulderMat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      return mesh;
-    }
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(size, size);
+      const data = img.data;
 
-    function placeBoulder(x, z, rx, ry, rz, rotY, seed, options = {}) {
-      const { yOffset = -0.08, rotX = 0, rotZ = 0 } = options;
-      const mesh = createGlaciatedBoulder(rx, ry, rz, seed, options);
-      const { h } = getTerrainData(x, z);
-      mesh.position.set(x, h + ry * 0.38 + yOffset, z);
-      mesh.rotation.set(rotX, rotY, rotZ);
-      scene.add(mesh);
-      return mesh;
-    }
-
-    function buildAllBouldersAndOutcrops() {
-      // --- A. ICONIC CREST BOULDERS IMMEDIATELY BELOW & AROUND LIGHTHOUSE BASE ---
-      // 1. Huge smooth rounded pillow boulder left-below lighthouse (x ~ 44% in photo) with vertical crack
-      placeBoulder(-3.25, -16.2, 2.05, 1.38, 1.55, 0.12, 10.1, {
-        seamX: 0.28, angular: 0.14, tone: 0.68, yOffset: 0.08
-      });
-      // 2. Rounded boulder immediately right of pillow boulder (under left side of lighthouse)
-      placeBoulder(-0.45, -16.9, 1.35, 0.96, 1.25, -0.25, 21.4, {
-        angular: 0.18, tone: 0.64, yOffset: 0.05
-      });
-      // 3. Flatter boulder directly in front of lighthouse porch/tower
-      placeBoulder(1.45, -16.8, 1.45, 0.72, 1.20, 0.18, 33.7, {
-        angular: 0.15, tone: 0.60, yOffset: -0.02
-      });
-      // 4. Crest boulders stepping left along the skyline ridge (x = 30% to 41% in photo)
-      placeBoulder(-5.55, -16.4, 1.15, 0.82, 1.10, 0.42, 41.2, { tone: 0.62, yOffset: 0.04 });
-      placeBoulder(-7.65, -15.8, 1.35, 0.88, 1.20, -0.31, 52.8, { tone: 0.65, yOffset: 0.02 });
-      placeBoulder(-9.45, -15.2, 1.10, 0.74, 1.05, 0.19, 63.5, { tone: 0.60, yOffset: 0.0 });
-      // Tilted angular horizon-breaking boulder at x ~ 26% on left skyline
-      placeBoulder(-11.8, -15.5, 1.55, 1.18, 1.25, 0.55, 74.1, {
-        angular: 0.34, tone: 0.66, rotZ: -0.28, yOffset: 0.12
-      });
-      placeBoulder(-13.8, -14.8, 1.25, 0.85, 1.15, -0.22, 81.9, { tone: 0.58, yOffset: 0.02 });
-
-      // --- B. RIGHT SLOPE GLACIATED WHALEBACK LEDGES & BOULDERS (x = 55% to 84%) ---
-      placeBoulder(4.8, -16.2, 2.65, 0.95, 2.15, -0.24, 91.3, {
-        seamX: -0.15, angular: 0.12, tone: 0.68, rotZ: -0.14, yOffset: -0.05
-      });
-      placeBoulder(8.2, -15.4, 2.85, 1.05, 2.25, -0.32, 102.6, {
-        seamX: 0.22, angular: 0.15, tone: 0.64, rotZ: -0.22, yOffset: -0.08
-      });
-      placeBoulder(11.6, -14.2, 2.70, 1.10, 2.10, -0.38, 114.2, {
-        angular: 0.18, tone: 0.58, rotZ: -0.28, yOffset: -0.12
-      });
-      placeBoulder(14.8, -12.8, 2.50, 1.05, 1.95, -0.45, 125.7, {
-        angular: 0.22, tone: 0.52, rotZ: -0.32, yOffset: -0.18
-      });
-      placeBoulder(17.5, -11.4, 2.10, 0.95, 1.75, -0.52, 136.4, {
-        angular: 0.25, tone: 0.48, rotZ: -0.35, yOffset: -0.22
-      });
-
-      // Small dark angular boulder in upper-mid slope below lighthouse (x ~ 54.5% in photo)
-      placeBoulder(0.82, -9.2, 0.68, 0.58, 0.62, 0.75, 148.9, {
-        angular: 0.36, tone: 0.44, yOffset: 0.02
-      });
-
-      // --- C. LEFT MIDGROUND WHALEBACK DOMES & FAR-LEFT SHADOWED CLIFF BLOCKS ---
-      // Smooth rounded sunlit whaleback dome at x ~ 18-24% in photo
-      placeBoulder(-9.2, -5.8, 2.55, 1.42, 2.15, 0.28, 159.3, {
-        seamX: -0.20, angular: 0.14, tone: 0.68, rotZ: 0.15, yOffset: 0.04
-      });
-      placeBoulder(-6.6, -7.8, 1.95, 1.08, 1.70, 0.15, 167.8, {
-        seamX: 0.15, angular: 0.16, tone: 0.65, yOffset: 0.0
-      });
-      // Far-left vertical cleaved coastal blocks (x = 0% to 15% in photo, casting deep shadows)
-      placeBoulder(-12.4, -3.5, 1.75, 1.48, 1.45, 0.48, 176.2, {
-        angular: 0.38, tone: 0.45, yOffset: 0.10
-      });
-      placeBoulder(-14.6, -2.2, 1.95, 1.62, 1.65, 0.12, 188.5, {
-        seamX: 0.05, angular: 0.35, tone: 0.42, yOffset: 0.12
-      });
-      placeBoulder(-16.8, -1.2, 1.85, 1.55, 1.50, -0.18, 195.1, {
-        angular: 0.38, tone: 0.38, yOffset: 0.10
-      });
-      placeBoulder(-18.6, -0.4, 1.65, 1.45, 1.40, 0.32, 204.7, {
-        angular: 0.36, tone: 0.40, yOffset: 0.08
-      });
-
-      // --- D. RIGHT MIDGROUND & FOREGROUND SENTINEL BOULDERS & SHORE ROCKS ---
-      // Prominent upright rounded sentinel boulder right of walkway bend (x ~ 87%, y ~ 27% in photo)
-      placeBoulder(5.95, 10.6, 0.92, 0.84, 0.82, -0.15, 215.4, {
-        angular: 0.20, tone: 0.66, yOffset: 0.14
-      });
-      // Pale rounded boulder further up right of walkway (x ~ 65%, y ~ 33% in photo)
-      placeBoulder(2.65, 4.4, 0.76, 0.52, 0.68, 0.35, 226.8, {
-        angular: 0.18, tone: 0.74, snowCap: 0.35, yOffset: 0.06
-      });
-      // Right shoreline boulders along water edge (x = 85% to 100%, y = 28% to 33% in photo)
-      placeBoulder(9.2, 7.2, 1.25, 0.68, 1.15, -0.28, 237.1, { tone: 0.64, snowCap: 0.25, yOffset: 0.0 });
-      placeBoulder(11.4, 6.8, 1.45, 0.78, 1.25, 0.14, 248.6, { tone: 0.66, snowCap: 0.2, yOffset: 0.02 });
-      placeBoulder(13.2, 7.6, 1.35, 0.72, 1.15, -0.42, 259.3, { tone: 0.62, yOffset: 0.0 });
-      placeBoulder(7.8, 10.8, 0.95, 0.46, 0.85, 0.22, 268.9, { tone: 0.60, snowCap: 0.3, yOffset: -0.04 });
-    }
-
-    buildAllBouldersAndOutcrops();
-
-    // =========================================================================
-    // 9. PEGGY'S POINT LIGHTHOUSE (Full Architectural 3D Reconstruction)
-    // =========================================================================
-    let fresnelLensGroup = null;
-
-    function buildPeggysPointLighthouse() {
-      const group = new THREE.Group();
-      // Exact position calibrated to reference photo framing
-      group.position.set(1.34, 2.57, -18.0);
-
-      // Materials
-      const whitePaintMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.58,
-        metalness: 0.02,
-        bumpMap: procTex.graniteBump,
-        bumpScale: 0.006,
-        flatShading: true // Crisp octagonal concrete facet edges as in reference
-      });
-
-      const smoothWhiteMat = new THREE.MeshStandardMaterial({
-        color: 0xfcfdff,
-        roughness: 0.48,
-        metalness: 0.05
-      });
-
-      const redLanternMat = new THREE.MeshStandardMaterial({
-        color: 0xb51c27,
-        roughness: 0.42,
-        metalness: 0.14,
-        flatShading: true
-      });
-
-      const darkTrimMat = new THREE.MeshStandardMaterial({
-        color: 0x161b22,
-        roughness: 0.35,
-        metalness: 0.25
-      });
-
-      const basePlinthMat = new THREE.MeshStandardMaterial({
-        color: 0x8d95a2,
-        roughness: 0.82,
-        metalness: 0.05,
-        flatShading: true
-      });
-
-      const glassPaneMat = new THREE.MeshPhysicalMaterial({
-        color: 0xdbeeff,
-        transparent: true,
-        opacity: 0.38,
-        roughness: 0.08,
-        metalness: 0.05,
-        reflectivity: 0.9,
-        side: THREE.DoubleSide
-      });
-
-      // Orientation of the 8-sided tower so 3 facets face the camera:
-      // Left-front (bright sun), Center-front (bright sun), Right-front (crisp cool blue shadow)
-      const octRotY = Math.PI / 8 + 0.12;
-
-      // 1. Concrete Foundation Plinth & Lower Flared Base Skirt
-      const plinthGeo = new THREE.CylinderGeometry(1.52, 1.62, 0.36, 8);
-      const plinth = new THREE.Mesh(plinthGeo, basePlinthMat);
-      plinth.position.y = 0.18;
-      plinth.rotation.y = octRotY;
-      plinth.castShadow = true;
-      plinth.receiveShadow = true;
-      group.add(plinth);
-
-      const lowerSkirtGeo = new THREE.CylinderGeometry(1.36, 1.50, 1.35, 8);
-      const lowerSkirt = new THREE.Mesh(lowerSkirtGeo, whitePaintMat);
-      lowerSkirt.position.y = 0.36 + 0.675;
-      lowerSkirt.rotation.y = octRotY;
-      lowerSkirt.castShadow = true;
-      lowerSkirt.receiveShadow = true;
-      group.add(lowerSkirt);
-
-      // 2. Main Tapered Octagonal White Concrete Shaft
-      const shaftHeight = 4.18;
-      const shaftGeo = new THREE.CylinderGeometry(0.95, 1.36, shaftHeight, 8);
-      const shaft = new THREE.Mesh(shaftGeo, whitePaintMat);
-      shaft.position.y = 1.71 + shaftHeight * 0.5;
-      shaft.rotation.y = octRotY;
-      shaft.castShadow = true;
-      shaft.receiveShadow = true;
-      group.add(shaft);
-
-      // 3. Flared Upper Cornice / Coving & Octagonal Gallery Deck
-      const cove1Geo = new THREE.CylinderGeometry(1.08, 0.95, 0.24, 8);
-      const cove1 = new THREE.Mesh(cove1Geo, whitePaintMat);
-      cove1.position.y = 6.01;
-      cove1.rotation.y = octRotY;
-      cove1.castShadow = true;
-      cove1.receiveShadow = true;
-      group.add(cove1);
-
-      const cove2Geo = new THREE.CylinderGeometry(1.34, 1.08, 0.22, 8);
-      const cove2 = new THREE.Mesh(cove2Geo, whitePaintMat);
-      cove2.position.y = 6.24;
-      cove2.rotation.y = octRotY;
-      cove2.castShadow = true;
-      cove2.receiveShadow = true;
-      group.add(cove2);
-
-      // Gallery platform overhang lip
-      const deckGeo = new THREE.CylinderGeometry(1.38, 1.35, 0.11, 8);
-      const deck = new THREE.Mesh(deckGeo, whitePaintMat);
-      deck.position.y = 6.40;
-      deck.rotation.y = octRotY;
-      deck.castShadow = true;
-      deck.receiveShadow = true;
-      group.add(deck);
-
-      // 4. Attached White Rectangular Entrance Vestibule / Porch (Left-Front Base)
-      const porchGroup = new THREE.Group();
-      porchGroup.position.set(-0.62, 0.28, 0.86);
-      porchGroup.rotation.y = 0.12;
-
-      // Main porch box
-      const porchBox = new THREE.Mesh(new THREE.BoxGeometry(0.88, 1.48, 0.96), whitePaintMat);
-      porchBox.position.y = 0.74;
-      porchBox.castShadow = true;
-      porchBox.receiveShadow = true;
-      porchGroup.add(porchBox);
-
-      // Pitched gable roof on porch
-      const roofShape = new THREE.Shape();
-      roofShape.moveTo(-0.48, 0);
-      roofShape.lineTo(0.48, 0);
-      roofShape.lineTo(0.0, 0.34);
-      roofShape.closePath();
-      const roofExtrude = new THREE.ExtrudeGeometry(roofShape, {
-        depth: 1.02,
-        bevelEnabled: false
-      });
-      const porchRoof = new THREE.Mesh(roofExtrude, whitePaintMat);
-      porchRoof.position.set(0, 1.48, -0.50);
-      porchRoof.castShadow = true;
-      porchRoof.receiveShadow = true;
-      porchGroup.add(porchRoof);
-
-      // Subtle recessed doorway panel & trim on front of porch
-      const doorFrame = new THREE.Mesh(
-        new THREE.BoxGeometry(0.46, 1.16, 0.04),
-        new THREE.MeshStandardMaterial({ color: 0xdce4f0, roughness: 0.65 })
-      );
-      doorFrame.position.set(0.0, 0.60, 0.475);
-      porchGroup.add(doorFrame);
-
-      group.add(porchGroup);
-
-      // 5. Tower Windows (Matching Reference Photo Placement)
-      // Lower-front dark square/rectangular window on front facet (right of porch)
-      const winFront = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.32, 0.08), darkTrimMat);
-      winFront.position.set(0.32, 1.08, 1.29);
-      winFront.rotation.y = 0.12;
-      group.add(winFront);
-
-      // Two narrow vertical windows on the shaded right-front facet
-      const rightFaceAngle = octRotY + Math.PI / 8; // ~ 52 deg toward +X, +Z
-      const nx = Math.sin(rightFaceAngle);
-      const nz = Math.cos(rightFaceAngle);
-
-      // Lower-mid window on right facet
-      const rMid1 = 1.14;
-      const winRight1 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.50, 0.08), darkTrimMat);
-      winRight1.position.set(nx * rMid1, 2.48, nz * rMid1);
-      winRight1.rotation.y = rightFaceAngle;
-      group.add(winRight1);
-
-      // Upper-mid window on right facet
-      const rMid2 = 1.01;
-      const winRight2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.52, 0.08), darkTrimMat);
-      winRight2.position.set(nx * rMid2, 4.18, nz * rMid2);
-      winRight2.rotation.y = rightFaceAngle;
-      group.add(winRight2);
-
-      // Small black iron step handrail at right base of lighthouse (visible in photo)
-      const baseRailGroup = new THREE.Group();
-      baseRailGroup.position.set(1.58, 0.0, 0.35);
-      const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.58, 8), darkTrimMat);
-      post1.position.set(0, 0.29, 0);
-      const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.52, 8), darkTrimMat);
-      post2.position.set(0.45, 0.14, 0.18);
-      const topBar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.54, 8), darkTrimMat);
-      topBar.position.set(0.225, 0.49, 0.09);
-      topBar.rotation.z = Math.PI / 2 + 0.28;
-      topBar.rotation.y = -0.38;
-      baseRailGroup.add(post1, post2, topBar);
-      group.add(baseRailGroup);
-
-      // 6. White Octagonal Gallery Deck Railing & Diagonal Bracing
-      const railRadius = 1.28;
-      const railBaseY = 6.45;
-      const railHeight = 0.52;
-      for (let i = 0; i < 8; i++) {
-        const a1 = octRotY + (i + 0.5) * (Math.PI / 4);
-        const a2 = octRotY + (i + 1.5) * (Math.PI / 4);
-        const x1 = Math.sin(a1) * railRadius, z1 = Math.cos(a1) * railRadius;
-        const x2 = Math.sin(a2) * railRadius, z2 = Math.cos(a2) * railRadius;
-
-        // Corner stanchion post
-        const stanchion = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.022, 0.022, railHeight, 8),
-          smoothWhiteMat
-        );
-        stanchion.position.set(x1, railBaseY + railHeight * 0.5, z1);
-        group.add(stanchion);
-
-        // Segment top & mid horizontal rails
-        const segLen = Math.hypot(x2 - x1, z2 - z1);
-        const midX = (x1 + x2) * 0.5, midZ = (z1 + z2) * 0.5;
-        const segAngle = Math.atan2(x2 - x1, z2 - z1);
-
-        [railHeight, railHeight * 0.52].forEach((ry) => {
-          const hBar = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.018, 0.018, segLen, 8),
-            smoothWhiteMat
-          );
-          hBar.position.set(midX, railBaseY + ry, midZ);
-          hBar.rotation.x = Math.PI / 2;
-          hBar.rotation.z = -segAngle;
-          group.add(hBar);
-        });
-
-        // Subtle diagonal cable/rod brace per segment
-        const diagLen = Math.hypot(segLen, railHeight);
-        const diagBar = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.010, 0.010, diagLen, 6),
-          smoothWhiteMat
-        );
-        diagBar.position.set(midX, railBaseY + railHeight * 0.5, midZ);
-        diagBar.rotation.y = segAngle;
-        diagBar.rotation.x = Math.atan2(segLen, railHeight);
-        group.add(diagBar);
+      for (let y = 0; y < size; y++) {
+        const ym = (y - 1 + size) % size;
+        const yp = (y + 1) % size;
+        for (let x = 0; x < size; x++) {
+          const xm = (x - 1 + size) % size;
+          const xp = (x + 1) % size;
+          const dx = (heights[y * size + xp] - heights[y * size + xm]) * strength;
+          const dy = (heights[yp * size + x] - heights[ym * size + x]) * strength;
+          const dz = 1.0;
+          const invLen = 1.0 / Math.hypot(dx, dy, dz);
+          const idx = (y * size + x) * 4;
+          data[idx]     = Math.round(((-dx * invLen) * 0.5 + 0.5) * 255);
+          data[idx + 1] = Math.round(((-dy * invLen) * 0.5 + 0.5) * 255);
+          data[idx + 2] = Math.round(((dz * invLen) * 0.5 + 0.5) * 255);
+          data[idx + 3] = 255;
+        }
       }
-
-      // 7. Crimson Red Octagonal Lantern Room & Glazing
-      const lanternBaseY = 6.45;
-      // Lower solid red octagonal parapet wall
-      const parapetH = 0.68;
-      const parapetGeo = new THREE.CylinderGeometry(0.92, 0.94, parapetH, 8);
-      const parapet = new THREE.Mesh(parapetGeo, redLanternMat);
-      parapet.position.y = lanternBaseY + parapetH * 0.5;
-      parapet.rotation.y = octRotY;
-      parapet.castShadow = true;
-      parapet.receiveShadow = true;
-      group.add(parapet);
-
-      // Glazed upper lantern storm panes (transparent glass + 8 red corner mullions)
-      const glassH = 0.72;
-      const glassY = lanternBaseY + parapetH + glassH * 0.5;
-      const glassCyl = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.88, 0.88, glassH, 8, 1, true),
-        glassPaneMat
-      );
-      glassCyl.position.y = glassY;
-      glassCyl.rotation.y = octRotY;
-      group.add(glassCyl);
-
-      for (let i = 0; i < 8; i++) {
-        const a = octRotY + (i + 0.5) * (Math.PI / 4);
-        const mullion = new THREE.Mesh(
-          new THREE.BoxGeometry(0.055, glassH + 0.04, 0.055),
-          redLanternMat
-        );
-        mullion.position.set(Math.sin(a) * 0.88, glassY, Math.cos(a) * 0.88);
-        mullion.rotation.y = a;
-        group.add(mullion);
-      }
-
-      // Internal Fresnel Lens & Lamp Assembly inside the glass lantern room
-      fresnelLensGroup = new THREE.Group();
-      fresnelLensGroup.position.y = glassY - 0.04;
-      const lensPedestal = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.24, 0.30, 0.28, 12),
-        new THREE.MeshStandardMaterial({ color: 0x3b424d, roughness: 0.4, metalness: 0.6 })
-      );
-      lensPedestal.position.y = -0.20;
-      fresnelLensGroup.add(lensPedestal);
-
-      const lensDrum = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.32, 0.32, 0.42, 16),
-        new THREE.MeshPhysicalMaterial({
-          color: 0xf5faff,
-          roughness: 0.12,
-          metalness: 0.15,
-          transparent: true,
-          opacity: 0.82
-        })
-      );
-      fresnelLensGroup.add(lensDrum);
-      group.add(fresnelLensGroup);
-
-      // 8. Red Octagonal Pitched Lantern Roof, Ventilator Ball & Lightning Rod
-      const roofBaseY = lanternBaseY + parapetH + glassH;
-      const eavesRing = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.02, 1.02, 0.07, 8),
-        redLanternMat
-      );
-      eavesRing.position.y = roofBaseY;
-      eavesRing.rotation.y = octRotY;
-      group.add(eavesRing);
-
-      const capH = 0.50;
-      const roofCap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.08, 1.02, capH, 8),
-        redLanternMat
-      );
-      roofCap.position.y = roofBaseY + capH * 0.5;
-      roofCap.rotation.y = octRotY;
-      roofCap.castShadow = true;
-      group.add(roofCap);
-
-      // Red ventilator sphere & pinnacle lightning rod
-      const ventBall = new THREE.Mesh(
-        new THREE.SphereGeometry(0.135, 16, 12),
-        redLanternMat
-      );
-      ventBall.position.y = roofBaseY + capH + 0.08;
-      group.add(ventBall);
-
-      const pinnacleSpike = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.045, 0.28, 8),
-        redLanternMat
-      );
-      pinnacleSpike.position.y = roofBaseY + capH + 0.24;
-      group.add(pinnacleSpike);
-
-      scene.add(group);
+      ctx.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = 8;
+      return tex;
     }
 
-    buildPeggysPointLighthouse();
+    const graniteNormalMap = createNormalTexture(512, 8, 5, 3.8, 0.14);
+    graniteNormalMap.repeat.set(22, 22);
+
+    const concreteNormalMap = createNormalTexture(256, 8, 4, 1.15, 0.05);
+    concreteNormalMap.repeat.set(3, 5);
 
     // =========================================================================
-    // 10. SWAYING WINTER COASTAL SEDGE TUFTS & WIND-BLOWN SPINDRIFT / MIST
+    // 4. RENDERER, SCENE, CAMERA & CONTROLS
     // =========================================================================
-    const grassUniforms = {
+    const container = document.getElementById('canvas-container');
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xc4daf0, 0.00145);
+
+    const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.2, 1600);
+    // Initial framing closely matches the uploaded photograph
+    const CAM_PRESETS = {
+      photo:   { pos: new THREE.Vector3(-0.3, 6.4, 34.5), target: new THREE.Vector3(1.5, 7.6, -21.0) },
+      aerial:  { pos: new THREE.Vector3(-34.0, 26.0, 24.0), target: new THREE.Vector3(1.0, 6.0, -14.0) },
+      closeup: { pos: new THREE.Vector3(-8.2, 11.8, -6.5), target: new THREE.Vector3(2.4, 13.8, -21.0) },
+      shore:   { pos: new THREE.Vector3(-19.5, 4.8, 18.5), target: new THREE.Vector3(2.0, 10.5, -20.5) }
+    };
+    camera.position.copy(CAM_PRESETS.photo.pos);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.copy(CAM_PRESETS.photo.target);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.minDistance = 5.0;
+    controls.maxDistance = 140.0;
+    controls.update();
+
+    // =========================================================================
+    // 5. LIGHTING & PROCEDURAL WINTER SKY DOME
+    // =========================================================================
+    const sunLight = new THREE.DirectionalLight(0xfff6ea, 3.2);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 220;
+    const sc = 48;
+    sunLight.shadow.camera.left = -sc;
+    sunLight.shadow.camera.right = sc;
+    sunLight.shadow.camera.top = sc;
+    sunLight.shadow.camera.bottom = -sc;
+    sunLight.shadow.bias = -0.00035;
+    sunLight.shadow.normalBias = 0.04;
+    sunLight.target.position.set(1.0, 5.0, -5.0);
+    scene.add(sunLight);
+    scene.add(sunLight.target);
+
+    const hemiLight = new THREE.HemisphereLight(0x7eb2f0, 0x8ea4bc, 0.92);
+    scene.add(hemiLight);
+
+    // Subtle cool sky bounce fill from the right so shadows stay luminous & crisp
+    const fillLight = new THREE.DirectionalLight(0x88b4e8, 0.42);
+    fillLight.position.set(45, 22, -25);
+    scene.add(fillLight);
+
+    const skyUniforms = {
+      uSunDir: { value: new THREE.Vector3(-0.76, 0.45, 0.46).normalize() },
+      uZenithColor: { value: new THREE.Color(0x3670c2) },
+      uMidSkyColor: { value: new THREE.Color(0x6fa1de) },
+      uHorizonColor: { value: new THREE.Color(0xcce0f4) },
+      uSunColor: { value: new THREE.Color(0xfff7e6) },
+      uCloudTint: { value: new THREE.Color(0xdde8f5) },
       uTime: { value: 0 }
     };
 
-    function buildCoastalSedgeTufts() {
-      // Dry golden-brown / russet winter coastal grass poking through snow crevices
-      const tuftSpots = [
-        [-2.8, 12.2, 1.1], [-1.7, 13.0, 0.9], [0.2, 9.6, 1.3],
-        [0.6, 11.4, 0.9],  [-4.6, 9.8, 1.2],  [-3.2, 7.6, 1.0],
-        [-5.8, 11.5, 1.1], [2.2, 8.2, 0.85],  [3.6, 12.0, 0.95],
-        [-0.8, 6.8, 1.0],  [1.6, 5.8, 0.8],   [-2.4, 15.6, 1.15],
-        [-5.1, 15.8, 1.0], [1.9, 14.2, 0.85], [-6.8, 7.2, 1.05]
-      ];
-
-      const bladeGeo = new THREE.ConeGeometry(0.032, 0.28, 4);
-      bladeGeo.translate(0, 0.14, 0);
-
-      const bladeMat = new THREE.MeshStandardMaterial({
-        color: 0x7b6344,
-        roughness: 0.88,
-        metalness: 0.02
-      });
-
-      bladeMat.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = grassUniforms.uTime;
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            '#include <common>',
-            /* glsl */ `
-            #include <common>
-            uniform float uTime;
-            `
-          )
-          .replace(
-            '#include <begin_vertex>',
-            /* glsl */ `
-            #include <begin_vertex>
-            vec4 wp = instanceMatrix * vec4(transformed, 1.0);
-            float tipFactor = clamp(position.y / 0.28, 0.0, 1.0);
-            float gust = sin(uTime * 3.4 + wp.x * 1.9 + wp.z * 1.3) * 0.045
-                       + cos(uTime * 5.8 + wp.x * 3.1) * 0.020;
-            transformed.x += (0.035 + gust) * tipFactor * tipFactor;
-            transformed.z += gust * 0.4 * tipFactor;
-            `
-          );
-      };
-
-      const bladesPerTuft = 18;
-      const totalBlades = tuftSpots.length * bladesPerTuft;
-      const instMesh = new THREE.InstancedMesh(bladeGeo, bladeMat, totalBlades);
-      instMesh.castShadow = true;
-      instMesh.receiveShadow = true;
-
-      const dummy = new THREE.Object3D();
-      const col = new THREE.Color();
-      let idx = 0;
-
-      tuftSpots.forEach(([tx, tz, scale], sIdx) => {
-        const { h } = getTerrainData(tx, tz);
-        for (let b = 0; b < bladesPerTuft; b++) {
-          const rAngle = hash2(sIdx * 19 + b, b * 7.3) * Math.PI * 2;
-          const rDist = hash2(b * 13.1, sIdx * 5.7) * 0.34 * scale;
-          const bx = tx + Math.cos(rAngle) * rDist;
-          const bz = tz + Math.sin(rAngle) * rDist;
-          const bh = getTerrainData(bx, bz).h;
-
-          dummy.position.set(bx, bh - 0.03, bz);
-          const tilt = 0.22 + hash2(b, sIdx) * 0.48;
-          dummy.rotation.set(
-            (hash2(b * 3, sIdx) - 0.5) * 0.4,
-            rAngle,
-            -tilt
-          );
-          const s = (0.65 + hash2(sIdx, b * 11) * 0.65) * scale;
-          dummy.scale.set(s, s, s);
-          dummy.updateMatrix();
-          instMesh.setMatrixAt(idx, dummy.matrix);
-
-          const shade = 0.78 + hash2(b * 5, sIdx * 3) * 0.38;
-          col.setRGB(0.50 * shade, 0.40 * shade, 0.27 * shade);
-          instMesh.setColorAt(idx, col);
-          idx++;
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: skyUniforms,
+      vertexShader: `
+        varying vec3 vWorldDir;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldDir = normalize(wp.xyz);
+          gl_Position = projectionMatrix * viewMatrix * wp;
         }
-      });
+      `,
+      fragmentShader: `
+        varying vec3 vWorldDir;
+        uniform vec3 uSunDir;
+        uniform vec3 uZenithColor;
+        uniform vec3 uMidSkyColor;
+        uniform vec3 uHorizonColor;
+        uniform vec3 uSunColor;
+        uniform vec3 uCloudTint;
+        uniform float uTime;
 
-      instMesh.instanceMatrix.needsUpdate = true;
-      if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
-      scene.add(instMesh);
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        float fbm(vec2 p) {
+          float v = 0.0, a = 0.5;
+          for (int i = 0; i < 4; i++) {
+            v += a * noise(p);
+            p *= 2.04;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        void main() {
+          vec3 dir = normalize(vWorldDir);
+          float h = clamp(dir.y, 0.0, 1.0);
+
+          // Crisp winter sky gradient
+          vec3 col = mix(uHorizonColor, uMidSkyColor, pow(h, 0.42));
+          col = mix(col, uZenithColor, pow(h, 1.15));
+
+          // Subtle Rayleigh scattering glow around the sun
+          float sunAmt = max(dot(dir, normalize(uSunDir)), 0.0);
+          col += uSunColor * pow(sunAmt, 14.0) * 0.22;
+          col += uSunColor * pow(sunAmt, 320.0) * 1.4;
+
+          // Delicate low winter horizon clouds mainly on the right horizon (matching the photo)
+          if (dir.y > 0.008 && dir.y < 0.26) {
+            vec2 cloudUV = dir.xz / (dir.y + 0.075);
+            float n = fbm(cloudUV * vec2(0.45, 0.7) + vec2(uTime * 0.004, 1.4));
+            float rightBias = smoothstep(-0.15, 0.55, dir.x) * smoothstep(0.3, -0.4, dir.z);
+            float altMask = smoothstep(0.012, 0.045, dir.y) * smoothstep(0.18, 0.055, dir.y);
+            float cloud = smoothstep(0.54, 0.78, n) * rightBias * altMask * 0.65;
+            vec3 cCol = mix(uCloudTint * 0.78, uCloudTint * 1.06, smoothstep(0.45, 0.85, n));
+            col = mix(col, cCol, cloud);
+          }
+
+          // Below horizon blends smoothly into ocean haze
+          if (dir.y < 0.0) {
+            col = mix(uHorizonColor, vec3(0.08, 0.22, 0.36), smoothstep(0.0, -0.15, dir.y));
+          }
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(950, 48, 32), skyMat);
+    scene.add(skyDome);
+
+    // Generate IBL Environment Map from our procedural sky for crisp reflections on glass & ice
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    function updateEnvironment() {
+      const envScene = new THREE.Scene();
+      const envSky = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat);
+      envScene.add(envSky);
+      const envRT = pmremGenerator.fromScene(envScene, 0.04);
+      if (scene.environment) scene.environment.dispose();
+      scene.environment = envRT.texture;
     }
 
-    buildCoastalSedgeTufts();
+    // =========================================================================
+    // 6. GRANITE + SNOW + ICY PATH CUSTOM PBR MATERIAL (Terrain & Boulders)
+    // =========================================================================
+    const terrainUniforms = {
+      uSunDir: { value: skyUniforms.uSunDir.value },
+      uSnowTint: { value: new THREE.Color(0xf6f9ff) },
+      uTime: { value: 0 }
+    };
 
-    // Subtle wind-driven spindrift (surface snow crystals) & coastal mist
-    function buildSpindriftSystem() {
-      const count = 420;
-      const positions = new Float32Array(count * 3);
-      const speeds = new Float32Array(count);
-      const phases = new Float32Array(count);
+    const graniteSnowMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.85,
+      metalness: 0.04,
+      normalMap: graniteNormalMap,
+      normalScale: new THREE.Vector2(1.15, 1.15)
+    });
 
-      for (let i = 0; i < count; i++) {
-        const x = (hash2(i, 1.1) - 0.5) * 34.0;
-        const z = -16.0 + hash2(i, 2.3) * 40.0;
-        const { h } = getTerrainData(x, z);
-        positions[i * 3]     = x;
-        positions[i * 3 + 1] = h + 0.06 + hash2(i, 3.7) * 0.55;
-        positions[i * 3 + 2] = z;
-        speeds[i] = 1.6 + hash2(i, 4.9) * 2.1;
-        phases[i] = hash2(i, 6.1) * Math.PI * 2;
+    graniteSnowMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uSunDir = terrainUniforms.uSunDir;
+      shader.uniforms.uSnowTint = terrainUniforms.uSnowTint;
+      shader.uniforms.uTime = terrainUniforms.uTime;
+
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNorm;`
+      ).replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec4 cwp = modelMatrix * vec4(transformed, 1.0);
+        vWorldPos = cwp.xyz;
+        vWorldNorm = normalize(mat3(modelMatrix) * objectNormal);`
+      );
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNorm;
+        uniform vec3 uSunDir;
+        uniform vec3 uSnowTint;
+        uniform float uTime;
+
+        float gHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+        float gNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), u.x),
+                     mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        float gFbm(vec2 p) {
+          float v = 0.0, a = 0.5;
+          for (int i = 0; i < 5; i++) {
+            v += a * gNoise(p);
+            p *= 2.05;
+            a *= 0.5;
+          }
+          return v;
+        }
+        float gRidged(vec2 p) {
+          float v = 0.0, a = 0.5;
+          for (int i = 0; i < 3; i++) {
+            float n = 1.0 - abs(gNoise(p) * 2.0 - 1.0);
+            v += a * n * n;
+            p *= 2.15;
+            a *= 0.5;
+          }
+          return v;
+        }
+        float pathCenterX(float z) {
+          float t = (z + 18.0) / 48.0;
+          return 1.8 - sin(t * 3.14159 * 1.15) * 4.8 + pow(max(0.0, t - 0.32), 1.85) * 24.0;
+        }`
+      ).replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 wp = vWorldPos;
+        vec3 wn = normalize(vWorldNorm);
+
+        // Multi-scale Peggy's Cove glacial grey granite
+        float nMacro = gFbm(wp.xz * 0.14 + vec2(2.3, -1.7));
+        float nMid   = gFbm(wp.xz * 0.85 + wp.y * 0.45);
+        float nFine  = gNoise(wp.xz * 7.5 + wp.y * 5.2);
+        float nSpeck = gHash(floor(wp.xz * 26.0 + wp.y * 18.0));
+
+        vec3 graniteLight = vec3(0.62, 0.64, 0.66);
+        vec3 graniteMid   = vec3(0.42, 0.44, 0.47);
+        vec3 graniteDark  = vec3(0.21, 0.22, 0.25);
+
+        vec3 rockCol = mix(graniteMid, graniteLight, smoothstep(0.28, 0.78, nMacro * 0.65 + nMid * 0.35));
+        rockCol = mix(rockCol, graniteDark, smoothstep(0.55, 0.88, nFine) * 0.38);
+        // Mineral feldspar & mica flecks
+        rockCol += (nSpeck - 0.5) * 0.085;
+
+        // Subtle warm coastal lichen/weathering streaks
+        float lichen = smoothstep(0.66, 0.84, gFbm(wp.xz * 0.32 + vec2(9.1, 4.4)));
+        rockCol = mix(rockCol, vec3(0.46, 0.44, 0.38), lichen * 0.28);
+
+        // Dark weathered granite fissures & cracks
+        float crack = gRidged(wp.xz * 0.24 + vec2(1.4, -3.2));
+        float crackLine = smoothstep(0.76, 0.90, crack);
+        rockCol = mix(rockCol, vec3(0.11, 0.12, 0.14), crackLine * 0.72);
+
+        // Wet dark shoreline rock zone near ocean water level
+        float wetShore = 1.0 - smoothstep(0.15, 1.55, wp.y + (nMid - 0.5) * 0.45);
+        rockCol *= mix(1.0, 0.42, wetShore);
+
+        // --- Patchy Wind-Swept Winter Snow Coverage ---
+        float slope = wn.y;
+        float driftNoise = gFbm(wp.xz * 0.11 + vec2(-4.2, 6.1));
+        float detailSnow = gFbm(wp.xz * 0.58 + vec2(1.7, -2.5));
+
+        // Snow collects on flatter ledges and hollows, swept off steep granite domes & lighthouse summit boulders
+        float lhSummitClear = smoothstep(4.5, 13.0, length(wp.xz - vec2(2.4, -21.0)));
+        float snowThreshold = 0.69 - driftNoise * 0.34 - (detailSnow - 0.5) * 0.16;
+        float snowMask = smoothstep(snowThreshold, snowThreshold + 0.11, slope);
+
+        // Extra snow drifts filling foreground right & midground flats (matching photo)
+        float fgRightDrift = smoothstep(-2.0, 18.0, wp.x) * smoothstep(2.0, 26.0, wp.z);
+        snowMask = clamp(snowMask + fgRightDrift * 0.52 * smoothstep(0.52, 0.80, slope), 0.0, 1.0);
+
+        // Keep foreground granite crests on bottom-left partially exposed with snowy crevices
+        float fgLeftCrest = smoothstep(14.0, 28.0, wp.z) * smoothstep(6.0, -14.0, wp.x);
+        snowMask *= mix(1.0, smoothstep(0.32, 0.75, 1.0 - nMacro) * 0.85, fgLeftCrest * 0.78);
+
+        // No snow on wet shoreline rocks
+        snowMask *= smoothstep(1.3, 2.7, wp.y);
+        snowMask *= mix(0.45, 1.0, lhSummitClear);
+
+        // Frost dusting on exposed foreground granite tops
+        float frostDust = smoothstep(0.72, 0.94, slope) * smoothstep(0.48, 0.78, nFine) * smoothstep(2.0, 4.0, wp.y) * 0.35;
+        rockCol = mix(rockCol, vec3(0.84, 0.88, 0.93), frostDust * (1.0 - snowMask));
+
+        // --- Curved Icy / Melted Path from Foreground-Right toward Midground ---
+        float pathMask = 0.0;
+        if (wp.z > -15.0 && wp.z < 31.0) {
+          float px = pathCenterX(wp.z);
+          float pd = abs(wp.x - px);
+          float widthVar = 0.95 + 0.35 * gNoise(vec2(wp.z * 0.25, 1.2));
+          pathMask = (1.0 - smoothstep(widthVar * 0.55, widthVar * 1.25, pd))
+                   * smoothstep(-15.0, -6.0, wp.z)
+                   * smoothstep(31.0, 24.0, wp.z);
+        }
+        // Path melts/compacts snow into dark wet slushy stone & translucent ice
+        snowMask *= (1.0 - pathMask * 0.92);
+        vec3 icePathCol = mix(vec3(0.30, 0.32, 0.35), vec3(0.50, 0.56, 0.64), smoothstep(0.35, 0.75, nMid));
+        rockCol = mix(rockCol, icePathCol, pathMask * 0.85);
+
+        // Snow color with cool shadowed micro-variation
+        vec3 snowCol = uSnowTint * (0.95 + 0.05 * detailSnow);
+        diffuseColor.rgb = mix(rockCol, snowCol, snowMask);
+
+        float customRoughness = mix(0.82, 0.58, snowMask);
+        customRoughness = mix(customRoughness, 0.16, max(wetShore * 0.85, pathMask * 0.92));
+
+        // Subtle crystalline snow sparkles in direct sunlight
+        vec3 viewDirW = normalize(cameraPosition - wp);
+        vec3 halfVec = normalize(normalize(uSunDir) + viewDirW);
+        float sparkleCell = gHash(floor(wp.xz * 34.0 + wp.y * 22.0 + floor(viewDirW.xz * 6.0)));
+        float sunFace = max(dot(wn, normalize(uSunDir)), 0.0);
+        float customSparkle = smoothstep(0.986, 0.999, sparkleCell)
+                            * pow(max(dot(wn, halfVec), 0.0), 6.0)
+                            * snowMask * sunFace * 1.15;`
+      ).replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+        roughnessFactor = customRoughness;`
+      ).replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3(1.0, 0.98, 0.95) * customSparkle;`
+      );
+    };
+
+    // =========================================================================
+    // 7. BUILD TERRAIN MESH (Granite Headland)
+    // =========================================================================
+    const terrainW = 148, terrainD = 134, segsX = 220, segsZ = 200;
+    const terrainGeo = new THREE.PlaneGeometry(terrainW, terrainD, segsX, segsZ);
+    terrainGeo.rotateX(-Math.PI / 2);
+
+    const posAttr = terrainGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i);
+      const z = posAttr.getZ(i) - 4.0;
+      posAttr.setZ(i, z);
+      posAttr.setY(i, getTerrainHeight(x, z));
+    }
+    terrainGeo.computeVertexNormals();
+
+    const terrainMesh = new THREE.Mesh(terrainGeo, graniteSnowMat);
+    terrainMesh.receiveShadow = true;
+    terrainMesh.castShadow = true;
+    scene.add(terrainMesh);
+
+    // =========================================================================
+    // 8. GLACIAL GRANITE BOULDERS (Hero formations matching the photo)
+    // =========================================================================
+    function createGraniteBoulder(rx, ry, rz, seed, flatness = 0.25) {
+      const geo = new THREE.IcosahedronGeometry(1.0, 4);
+      const p = geo.attributes.position;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i);
+        // Smooth glacial rounding + subtle planar rock facets
+        const n1 = fbm2D(v.x * 1.6 + seed, v.z * 1.6 - seed * 0.7, 3) - 0.5;
+        const n2 = fbm2D(v.y * 2.4 + seed * 1.3, v.x * 2.2 + v.z * 1.9, 3) - 0.5;
+        const crack = Math.max(0, ridged2D(v.x * 2.1 + seed, v.y * 2.1 + v.z, 2) - 0.72);
+        const disp = 1.0 + n1 * 0.34 + n2 * 0.14 - crack * 0.32;
+        v.x *= rx * disp;
+        v.y *= ry * disp;
+        v.z *= rz * disp;
+        if (v.y < -ry * (1.0 - flatness)) {
+          v.y = -ry * (1.0 - flatness) + (v.y + ry * (1.0 - flatness)) * 0.25;
+        }
+        p.setXYZ(i, v.x, v.y, v.z);
       }
-
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
-      geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-
-      const mat = new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        uniforms: {
-          uTime: skyUniforms.uTime
-        },
-        vertexShader: /* glsl */ `
-          attribute float aSpeed;
-          attribute float aPhase;
-          uniform float uTime;
-          varying float vAlpha;
-
-          void main() {
-            vec3 p = position;
-            // Drift gently from left (-X) to right (+X) in the coastal breeze
-            float drift = mod(p.x + 17.0 + uTime * aSpeed, 34.0) - 17.0;
-            p.x = drift;
-            p.y += sin(uTime * 2.8 + aPhase + p.x * 0.8) * 0.06;
-            p.z += cos(uTime * 1.9 + aPhase) * 0.08;
-
-            // Fade smoothly at edges of domain
-            float edgeFade = smoothstep(-17.0, -12.0, p.x) * smoothstep(17.0, 12.0, p.x);
-            vAlpha = edgeFade * (0.22 + 0.14 * sin(uTime * 3.5 + aPhase));
-
-            vec4 mvPos = modelViewMatrix * vec4(p, 1.0);
-            gl_PointSize = clamp(24.0 / -mvPos.z, 1.5, 4.2);
-            gl_Position = projectionMatrix * mvPos;
-          }
-        `,
-        fragmentShader: /* glsl */ `
-          varying float vAlpha;
-          void main() {
-            float d = length(gl_PointCoord - vec2(0.5));
-            float a = smoothstep(0.5, 0.08, d) * vAlpha;
-            gl_FragColor = vec4(0.95, 0.98, 1.0, a);
-          }
-        `
-      });
-
-      const points = new THREE.Points(geo, mat);
-      scene.add(points);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, graniteSnowMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
     }
 
-    buildSpindriftSystem();
+    const boulderConfigs = [
+      // Two iconic rounded boulders immediately in front-left of the lighthouse base
+      { x: -3.2, z: -16.8, rx: 2.35, ry: 1.55, rz: 1.85, rotY: 0.3,  seed: 1.1 },
+      { x: 0.4,  z: -16.2, rx: 1.75, ry: 1.15, rz: 1.35, rotY: -0.4, seed: 2.4 },
+      { x: -6.4, z: -15.0, rx: 1.35, ry: 0.95, rz: 1.15, rotY: 0.8,  seed: 3.7 },
+      { x: 4.5,  z: -13.5, rx: 1.15, ry: 0.85, rz: 0.95, rotY: 1.2,  seed: 4.3 },
+
+      // Prominent lone boulder near the right foreground beside the curved icy path
+      { x: 14.5, z: 16.5,  rx: 1.35, ry: 1.45, rz: 1.25, rotY: 0.5,  seed: 5.9 },
+      { x: 7.4,  z: 7.2,   rx: 1.25, ry: 0.85, rz: 1.05, rotY: -0.6, seed: 6.8 },
+
+      // Left-side dramatic coastal granite blocks dropping to the Atlantic
+      { x: -24.5, z: 12.5, rx: 3.8, ry: 2.6, rz: 3.2, rotY: 0.2,  seed: 8.1 },
+      { x: -19.5, z: 6.5,  rx: 3.4, ry: 2.3, rz: 2.8, rotY: 0.7,  seed: 9.4 },
+      { x: -16.5, z: -2.0, rx: 3.1, ry: 2.1, rz: 2.6, rotY: -0.5, seed: 10.6 },
+      { x: -14.2, z: -10.5,rx: 2.6, ry: 1.8, rz: 2.2, rotY: 0.9,  seed: 11.8 },
+      { x: -11.0, z: -14.5,rx: 2.0, ry: 1.4, rz: 1.7, rotY: 0.4,  seed: 12.5 },
+      { x: -28.0, z: 19.0, rx: 4.2, ry: 2.5, rz: 3.5, rotY: -0.3, seed: 13.2 },
+
+      // Right shoreline granite boulders sloping into St. Margaret's Bay
+      { x: 18.5, z: -8.5,  rx: 3.2, ry: 1.9, rz: 2.9, rotY: 0.4,  seed: 14.7 },
+      { x: 22.5, z: -1.5,  rx: 2.8, ry: 1.7, rz: 2.6, rotY: -0.8, seed: 15.3 },
+      { x: 21.0, z: 10.0,  rx: 2.2, ry: 1.3, rz: 1.9, rotY: 0.6,  seed: 16.4 },
+      { x: 19.0, z: 18.0,  rx: 1.8, ry: 1.1, rz: 1.6, rotY: -0.2, seed: 17.9 },
+
+      // Midground & foreground accents
+      { x: -9.5, z: 19.5,  rx: 2.1, ry: 1.15, rz: 1.7, rotY: 0.3, seed: 18.6 },
+      { x: 10.5, z: -15.8, rx: 2.6, ry: 1.55, rz: 2.2, rotY: -0.5, seed: 19.2 },
+      { x: -7.2, z: -4.8,  rx: 1.3, ry: 0.75, rz: 1.1, rotY: 1.1, seed: 20.5 },
+      { x: 11.2, z: 19.8,  rx: 1.15, ry: 0.65, rz: 0.95, rotY: 0.2, seed: 21.3 }
+    ];
+
+    for (const b of boulderConfigs) {
+      const boulder = createGraniteBoulder(b.rx, b.ry, b.rz, b.seed);
+      const y = getTerrainHeight(b.x, b.z) + b.ry * 0.32;
+      boulder.position.set(b.x, y, b.z);
+      boulder.rotation.y = b.rotY;
+      scene.add(boulder);
+    }
 
     // =========================================================================
-    // 11. RESIZE HANDLER & CONTINUOUS LIVE PHOTOGRAPH ANIMATION LOOP
+    // 9. PEGGY'S COVE LIGHTHOUSE (High-Detail Architectural Recreation)
     // =========================================================================
+    const lighthouseGroup = new THREE.Group();
+    lighthouseGroup.position.copy(LIGHTHOUSE_POS);
+    // Slight rotation so front-left entrance porch and right slit windows match the photo
+    lighthouseGroup.rotation.y = 0.24;
+    scene.add(lighthouseGroup);
+
+    const whiteConcreteMat = new THREE.MeshStandardMaterial({
+      color: 0xf7f9fc,
+      roughness: 0.76,
+      metalness: 0.02,
+      normalMap: concreteNormalMap,
+      normalScale: new THREE.Vector2(0.42, 0.42)
+    });
+
+    const redMetalMat = new THREE.MeshStandardMaterial({
+      color: 0xb61b26,
+      roughness: 0.34,
+      metalness: 0.28
+    });
+
+    const whiteMetalMat = new THREE.MeshStandardMaterial({
+      color: 0xf2f5f9,
+      roughness: 0.38,
+      metalness: 0.45
+    });
+
+    const darkRecessMat = new THREE.MeshStandardMaterial({
+      color: 0x161c24,
+      roughness: 0.45,
+      metalness: 0.2
+    });
+
+    const lanternGlassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x2a3c4f,
+      roughness: 0.08,
+      metalness: 0.12,
+      transmission: 0.62,
+      transparent: true,
+      opacity: 0.78,
+      ior: 1.5,
+      reflectivity: 0.95
+    });
+
+    // 9a. Concrete Plinth Foundation
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(2.72, 2.95, 1.2, 8), whiteConcreteMat);
+    plinth.position.y = 0.2;
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    lighthouseGroup.add(plinth);
+
+    // 9b. Tapered Octagonal Tower Shaft
+    const towerHeight = 10.6;
+    const towerGeo = new THREE.CylinderGeometry(1.56, 2.48, towerHeight, 8);
+    const towerMesh = new THREE.Mesh(towerGeo, whiteConcreteMat);
+    towerMesh.position.y = 0.75 + towerHeight * 0.5;
+    towerMesh.castShadow = true;
+    towerMesh.receiveShadow = true;
+    lighthouseGroup.add(towerMesh);
+
+    // 9c. Entrance Vestibule (left-front white porch with pitched cap)
+    const porchGroup = new THREE.Group();
+    porchGroup.position.set(-1.78, 1.75, 1.38);
+    porchGroup.rotation.y = -Math.PI * 0.22;
+
+    const porchBody = new THREE.Mesh(new THREE.BoxGeometry(1.55, 2.7, 1.45), whiteConcreteMat);
+    porchBody.castShadow = true;
+    porchBody.receiveShadow = true;
+    porchGroup.add(porchBody);
+
+    // Sloped roof cap on vestibule
+    const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.22, 1.62), whiteConcreteMat);
+    porchRoof.position.set(0, 1.42, 0.02);
+    porchRoof.rotation.x = 0.14;
+    porchRoof.castShadow = true;
+    porchGroup.add(porchRoof);
+
+    // Recessed door/window detail on porch
+    const porchDoor = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.85, 0.1), whiteConcreteMat);
+    porchDoor.position.set(0.32, -0.35, 0.71);
+    porchGroup.add(porchDoor);
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.76, 1.92, 0.06), new THREE.MeshStandardMaterial({ color: 0xd0d7e0, roughness: 0.7 }));
+    doorFrame.position.set(0.32, -0.35, 0.70);
+    porchGroup.add(doorFrame);
+    const porchSmallVent = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.08), darkRecessMat);
+    porchSmallVent.position.set(-0.35, 0.35, 0.72);
+    porchGroup.add(porchSmallVent);
+    lighthouseGroup.add(porchGroup);
+
+    // 9d. Tower Windows & Lower Dark Vent (matching right-front & right faces in photo)
+    const lowerWindow = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.48, 0.18), darkRecessMat);
+    lowerWindow.position.set(0.62, 2.25, 2.18);
+    lowerWindow.rotation.y = 0.26;
+    lighthouseGroup.add(lowerWindow);
+
+    const slitYPositions = [5.1, 7.6, 9.6];
+    for (let i = 0; i < slitYPositions.length; i++) {
+      const y = slitYPositions[i];
+      const rAtY = THREE.MathUtils.lerp(2.48, 1.56, (y - 0.75) / towerHeight) * 0.92;
+      const slit = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.88, 0.22), darkRecessMat);
+      const angle = i === 2 ? 0.95 : 1.05;
+      slit.position.set(Math.sin(angle) * rAtY, y, Math.cos(angle) * rAtY);
+      slit.rotation.y = angle;
+      lighthouseGroup.add(slit);
+    }
+
+    // 9e. Corbelled Flared Gallery Deck
+    const galleryBaseY = 0.75 + towerHeight;
+    const flare = new THREE.Mesh(new THREE.CylinderGeometry(2.14, 1.58, 0.62, 8), whiteConcreteMat);
+    flare.position.y = galleryBaseY + 0.31;
+    flare.castShadow = true;
+    flare.receiveShadow = true;
+    lighthouseGroup.add(flare);
+
+    const deckSlab = new THREE.Mesh(new THREE.CylinderGeometry(2.18, 2.14, 0.22, 8), whiteConcreteMat);
+    deckSlab.position.y = galleryBaseY + 0.72;
+    deckSlab.castShadow = true;
+    deckSlab.receiveShadow = true;
+    lighthouseGroup.add(deckSlab);
+
+    // Gallery Railing (8 posts + 2 horizontal octagonal rail loops)
+    const railY = galleryBaseY + 0.83;
+    const railR = 2.04;
+    const railH = 0.96;
+    const railPts = [];
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const px = Math.cos(ang) * railR;
+      const pz = Math.sin(ang) * railR;
+      railPts.push(new THREE.Vector3(px, 0, pz));
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, railH, 8), whiteMetalMat);
+      post.position.set(px, railY + railH * 0.5, pz);
+      post.castShadow = true;
+      lighthouseGroup.add(post);
+    }
+    for (const hOff of [railH * 0.5, railH * 0.96]) {
+      for (let i = 0; i < 8; i++) {
+        const p1 = railPts[i];
+        const p2 = railPts[(i + 1) % 8];
+        const segLen = p1.distanceTo(p2);
+        const railBar = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, segLen, 8), whiteMetalMat);
+        railBar.position.set((p1.x + p2.x) * 0.5, railY + hOff, (p1.z + p2.z) * 0.5);
+        railBar.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(p2.x - p1.x, 0, p2.z - p1.z).normalize()
+        );
+        lighthouseGroup.add(railBar);
+      }
+    }
+
+    // 9f. Red Lantern Room Base (Parapet)
+    const lanternBaseY = galleryBaseY + 0.83;
+    const redParapet = new THREE.Mesh(new THREE.CylinderGeometry(1.36, 1.38, 1.05, 8), redMetalMat);
+    redParapet.position.y = lanternBaseY + 0.525;
+    redParapet.castShadow = true;
+    redParapet.receiveShadow = true;
+    lighthouseGroup.add(redParapet);
+
+    // Thin red sill ring
+    const sillRing = new THREE.Mesh(new THREE.CylinderGeometry(1.42, 1.42, 0.09, 8), redMetalMat);
+    sillRing.position.y = lanternBaseY + 1.05;
+    lighthouseGroup.add(sillRing);
+
+    // 9g. Lantern Glazing + Mullions + Internal Fresnel Lens
+    const glassY = lanternBaseY + 1.09;
+    const glassH = 1.28;
+    const glassCylinder = new THREE.Mesh(new THREE.CylinderGeometry(1.30, 1.30, glassH, 8), lanternGlassMat);
+    glassCylinder.position.y = glassY + glassH * 0.5;
+    lighthouseGroup.add(glassCylinder);
+
+    // 8 Vertical red mullions around lantern glass
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const mullion = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, glassH + 0.06, 6), redMetalMat);
+      mullion.position.set(Math.cos(ang) * 1.32, glassY + glassH * 0.5, Math.sin(ang) * 1.32);
+      lighthouseGroup.add(mullion);
+    }
+
+    // Internal Fresnel Lens & Lamp Core
+    const lensY = glassY + glassH * 0.52;
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xb08a3e, roughness: 0.3, metalness: 0.85 });
+    const lensPedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 0.55, 12), brassMat);
+    lensPedestal.position.y = glassY + 0.25;
+    lighthouseGroup.add(lensPedestal);
+
+    const lampCoreMat = new THREE.MeshStandardMaterial({
+      color: 0xfff5d6,
+      emissive: new THREE.Color(0xffcf70),
+      emissiveIntensity: 0.45,
+      roughness: 0.15
+    });
+    const fresnelCore = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.68, 16), lampCoreMat);
+    fresnelCore.position.y = lensY;
+    lighthouseGroup.add(fresnelCore);
+
+    // Optional Rotating Volumetric Lighthouse Beam (toggled via UI or Blue Hour)
+    const beamPivot = new THREE.Group();
+    beamPivot.position.y = lensY;
+    beamPivot.visible = false;
+    lighthouseGroup.add(beamPivot);
+
+    const beamMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uColor: { value: new THREE.Color(0xffdfa0) },
+        uOpacity: { value: 0.28 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNorm;
+        varying vec3 vView;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vNorm = normalize(normalMatrix * normal);
+          vView = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        varying vec3 vNorm;
+        varying vec3 vView;
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        void main() {
+          float edge = pow(abs(dot(vNorm, vView)), 1.6);
+          float fade = smoothstep(0.0, 0.12, vUv.y) * pow(1.0 - vUv.y, 1.85);
+          gl_FragColor = vec4(uColor, edge * fade * uOpacity);
+        }
+      `
+    });
+    const beamLen = 56;
+    const beamConeGeo = new THREE.ConeGeometry(7.2, beamLen, 28, 1, true);
+    beamConeGeo.translate(0, -beamLen * 0.5, 0);
+    beamConeGeo.rotateX(Math.PI / 2);
+
+    const beamA = new THREE.Mesh(beamConeGeo, beamMat);
+    beamA.position.z = 0.5;
+    beamPivot.add(beamA);
+    const beamB = new THREE.Mesh(beamConeGeo, beamMat);
+    beamB.rotation.y = Math.PI;
+    beamB.position.z = -0.5;
+    beamPivot.add(beamB);
+
+    const beaconPointLight = new THREE.PointLight(0xffcf78, 0, 28);
+    beaconPointLight.position.y = lensY;
+    lighthouseGroup.add(beaconPointLight);
+
+    // 9h. Red Conical Octagonal Roof + Standing Seams + Ventilator Ball Finial
+    const roofBaseY = glassY + glassH;
+    const roofEave = new THREE.Mesh(new THREE.CylinderGeometry(1.52, 1.48, 0.16, 8), redMetalMat);
+    roofEave.position.y = roofBaseY + 0.08;
+    roofEave.castShadow = true;
+    lighthouseGroup.add(roofEave);
+
+    const roofCone = new THREE.Mesh(new THREE.ConeGeometry(1.48, 1.28, 8), redMetalMat);
+    roofCone.position.y = roofBaseY + 0.16 + 0.64;
+    roofCone.castShadow = true;
+    lighthouseGroup.add(roofCone);
+
+    const ventCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.34, 12), redMetalMat);
+    ventCap.position.y = roofBaseY + 1.42;
+    lighthouseGroup.add(ventCap);
+
+    const finialBall = new THREE.Mesh(new THREE.SphereGeometry(0.20, 14, 12), redMetalMat);
+    finialBall.position.y = roofBaseY + 1.68;
+    lighthouseGroup.add(finialBall);
+
+    const lightningRod = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.022, 0.55, 6), redMetalMat);
+    lightningRod.position.y = roofBaseY + 2.02;
+    lighthouseGroup.add(lightningRod);
+
+    // 9i. Small Dark Iron Handrail on the Granite Steps (right of lighthouse base, visible in photo)
+    const ironMat = new THREE.MeshStandardMaterial({ color: 0x22262c, roughness: 0.55, metalness: 0.7 });
+    const stairRailGroup = new THREE.Group();
+    stairRailGroup.position.set(2.95, 0.65, 0.75);
+    for (const dx of [0, 1.35]) {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.05, 6), ironMat);
+      p.position.set(dx, 0.5 - dx * 0.28, 0);
+      stairRailGroup.add(p);
+    }
+    const topRail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.5, 6), ironMat);
+    topRail.position.set(0.68, 0.82, 0);
+    topRail.rotation.z = Math.PI / 2 - 0.27;
+    stairRailGroup.add(topRail);
+    lighthouseGroup.add(stairRailGroup);
+
+    // =========================================================================
+    // 10. DRY WINTER COASTAL GRASS TUFTS (Instanced in rocky crevices)
+    // =========================================================================
+    const grassCount = 950;
+    const bladeGeo = new THREE.ConeGeometry(0.035, 0.42, 3);
+    bladeGeo.translate(0, 0.21, 0);
+    const grassMat = new THREE.MeshStandardMaterial({
+      color: 0x867458,
+      roughness: 0.92,
+      metalness: 0.0
+    });
+    const grassInst = new THREE.InstancedMesh(bladeGeo, grassMat, grassCount);
+    const dummy = new THREE.Object3D();
+    const gColor = new THREE.Color();
+    let placed = 0;
+
+    for (let i = 0; i < 4500 && placed < grassCount; i++) {
+      const gx = (hash2(i * 1.13, 4.7) - 0.5) * 44.0;
+      const gz = (hash2(i * 2.31, 9.2) - 0.5) * 52.0 + 4.0;
+      const gy = getTerrainHeight(gx, gz);
+      if (gy < 2.2) continue;
+      // Avoid lighthouse footprint & icy path center
+      if (Math.hypot(gx - LIGHTHOUSE_POS.x, gz - LIGHTHOUSE_POS.z) < 4.5) continue;
+      if (Math.abs(gx - getPathCenterX(gz)) < 1.35) continue;
+
+      // Cluster into natural coastal tussocks
+      const cluster = fbm2D(gx * 0.35 + 12.0, gz * 0.35 - 5.0, 2);
+      if (cluster < 0.57) continue;
+
+      const s = 0.55 + hash2(i, 7.7) * 0.9;
+      dummy.position.set(gx, gy - 0.04, gz);
+      dummy.rotation.set(
+        (hash2(i, 1.1) - 0.5) * 0.65,
+        hash2(i, 2.2) * Math.PI * 2,
+        (hash2(i, 3.3) - 0.5) * 0.65
+      );
+      dummy.scale.set(s, s * (0.75 + hash2(i, 5.5) * 0.6), s);
+      dummy.updateMatrix();
+      grassInst.setMatrixAt(placed, dummy.matrix);
+
+      gColor.setHSL(0.09 + (hash2(i, 8.8) - 0.5) * 0.03, 0.24, 0.34 + hash2(i, 6.6) * 0.14);
+      grassInst.setColorAt(placed, gColor);
+      placed++;
+    }
+    grassInst.count = placed;
+    grassInst.instanceMatrix.needsUpdate = true;
+    if (grassInst.instanceColor) grassInst.instanceColor.needsUpdate = true;
+    scene.add(grassInst);
+
+    // =========================================================================
+    // 11. ANIMATED COLD ATLANTIC OCEAN SHADER (Waves, Fresnel, Surf Foam)
+    // =========================================================================
+    const oceanUniforms = {
+      uTime: { value: 0 },
+      uSunDir: { value: skyUniforms.uSunDir.value },
+      uSunColor: { value: new THREE.Color(0xfff5e4) },
+      uSkyHorizon: { value: skyUniforms.uHorizonColor.value },
+      uSkyZenith: { value: skyUniforms.uZenithColor.value },
+      uDeepColor: { value: new THREE.Color(0x0d2d4a) },
+      uShallowColor: { value: new THREE.Color(0x1f5378) }
+    };
+
+    const oceanGeo = new THREE.PlaneGeometry(1600, 1600, 140, 140);
+    oceanGeo.rotateX(-Math.PI / 2);
+
+    const oceanMat = new THREE.ShaderMaterial({
+      uniforms: oceanUniforms,
+      vertexShader: `
+        uniform float uTime;
+        varying vec3 vWorldPos;
+        varying float vWaveH;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          float d = length(wp.xz);
+          float atten = 1.0 - smoothstep(140.0, 620.0, d);
+          float w1 = sin(wp.x * 0.16 + wp.z * 0.12 + uTime * 1.15) * 0.16;
+          float w2 = sin(wp.x * -0.09 + wp.z * 0.21 + uTime * 1.45) * 0.11;
+          float w3 = cos(wp.x * 0.28 - wp.z * 0.17 + uTime * 1.85) * 0.05;
+          float h = (w1 + w2 + w3) * atten;
+          wp.y += h;
+          vWaveH = h;
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform vec3 uSkyHorizon;
+        uniform vec3 uSkyZenith;
+        uniform vec3 uDeepColor;
+        uniform vec3 uShallowColor;
+
+        varying vec3 vWorldPos;
+        varying float vWaveH;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+                     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        float waveHeight(vec2 p) {
+          float t = uTime;
+          float h = 0.0;
+          h += noise(p * 0.22 + vec2(t * 0.35, t * 0.22)) * 0.55;
+          h += noise(p * 0.58 - vec2(t * 0.45, -t * 0.31)) * 0.28;
+          h += noise(p * 1.45 + vec2(-t * 0.62, t * 0.54)) * 0.12;
+          h += noise(p * 3.20 + vec2(t * 0.85, -t * 0.7)) * 0.05;
+          return h;
+        }
+
+        void main() {
+          vec3 viewVec = cameraPosition - vWorldPos;
+          float dist = length(viewVec);
+          vec3 V = viewVec / dist;
+
+          // Finite-difference micro-wave normal (fades slightly with distance to avoid aliasing)
+          float eps = mix(0.18, 1.2, smoothstep(20.0, 350.0, dist));
+          float hC = waveHeight(vWorldPos.xz);
+          float hX = waveHeight(vWorldPos.xz + vec2(eps, 0.0));
+          float hZ = waveHeight(vWorldPos.xz + vec2(0.0, eps));
+          float bumpScale = mix(0.65, 0.22, smoothstep(40.0, 420.0, dist));
+          vec3 N = normalize(vec3((hC - hX) * bumpScale / eps, 1.0, (hC - hZ) * bumpScale / eps));
+
+          // Physically inspired Fresnel reflection
+          float NdotV = max(dot(N, V), 0.001);
+          float fresnel = 0.03 + 0.97 * pow(1.0 - NdotV, 4.6);
+
+          vec3 R = reflect(-V, N);
+          vec3 skyRefl = mix(uSkyHorizon, uSkyZenith, pow(clamp(R.y, 0.0, 1.0), 0.55));
+
+          vec3 waterBase = mix(uDeepColor, uShallowColor, clamp(hC * 0.85 + 0.15, 0.0, 1.0));
+          vec3 col = mix(waterBase, skyRefl, clamp(fresnel * 0.92, 0.0, 0.88));
+
+          // Crisp winter sun specular glints on choppy swells
+          vec3 L = normalize(uSunDir);
+          vec3 H = normalize(L + V);
+          float specTight = pow(max(dot(N, H), 0.0), 260.0) * 2.2;
+          float specBroad = pow(max(dot(N, H), 0.0), 26.0) * 0.18;
+          col += uSunColor * (specTight + specBroad);
+
+          // Shoreline surf foam ring around the granite headland
+          vec2 penUV = vec2((vWorldPos.x - 1.2) / 30.0, (vWorldPos.z + 2.0) / 44.0);
+          float penDist = length(penUV);
+          float shoreBand = smoothstep(1.38, 1.02, penDist) * smoothstep(0.76, 1.08, penDist);
+          float surfWave = sin(penDist * 28.0 - uTime * 2.2 + hC * 4.5) * 0.5 + 0.5;
+          float foam = shoreBand * smoothstep(0.42, 0.82, surfWave * 0.65 + hC * 0.55) * 0.72;
+          col = mix(col, vec3(0.86, 0.92, 0.97), foam);
+
+          // Atmospheric distance haze blending cleanly to the horizon
+          float fogFactor = 1.0 - exp(-pow(dist * 0.00155, 1.6));
+          col = mix(col, uSkyHorizon, clamp(fogFactor, 0.0, 1.0));
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+    const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+    oceanMesh.position.y = 0.0;
+    scene.add(oceanMesh);
+
+    // =========================================================================
+    // 12. DISTANT COASTLINE HILLS (St. Margaret's Bay right + island sliver left)
+    // =========================================================================
+    function createDistantLand(startAngle, endAngle, radius, maxHeight, seed) {
+      const segs = 90;
+      const geo = new THREE.BufferGeometry();
+      const verts = [];
+      const indices = [];
+
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const ang = THREE.MathUtils.lerp(startAngle, endAngle, t);
+        const envelope = Math.sin(t * Math.PI);
+        const h = (0.35 + 0.65 * fbm2D(t * 7.5 + seed, seed, 4)) * maxHeight * Math.pow(envelope, 0.65);
+
+        const x = Math.sin(ang) * radius;
+        const z = -Math.cos(ang) * radius;
+        verts.push(x, -1.5, z);
+        verts.push(x, h, z);
+      }
+      for (let i = 0; i < segs; i++) {
+        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+        indices.push(a, b, c, b, d, c);
+      }
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x455a73,
+        roughness: 0.95,
+        metalness: 0.0,
+        side: THREE.DoubleSide
+      });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    // Right horizon hills (St. Margaret's Bay coastline matching the photo)
+    const rightCoast = createDistantLand(0.14, 1.35, 560, 17.5, 3.2);
+    scene.add(rightCoast);
+
+    // Tiny low island sliver on the left horizon (matching the photo)
+    const leftIsland = createDistantLand(-0.56, -0.34, 580, 4.2, 8.7);
+    scene.add(leftIsland);
+
+    // =========================================================================
+    // 13. OPTIONAL LIGHT SNOW FLURRIES (Particle System)
+    // =========================================================================
+    const snowCount = 1400;
+    const snowGeo = new THREE.BufferGeometry();
+    const snowPositions = new Float32Array(snowCount * 3);
+    const snowSeeds = new Float32Array(snowCount);
+    for (let i = 0; i < snowCount; i++) {
+      snowPositions[i * 3]     = (Math.random() - 0.5) * 90;
+      snowPositions[i * 3 + 1] = Math.random() * 34 + 1;
+      snowPositions[i * 3 + 2] = (Math.random() - 0.5) * 90;
+      snowSeeds[i] = Math.random() * Math.PI * 2;
+    }
+    snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+    const snowMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.16,
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false
+    });
+    const snowPoints = new THREE.Points(snowGeo, snowMat);
+    snowPoints.visible = false;
+    scene.add(snowPoints);
+
+    // =========================================================================
+    // 14. LIGHTING PRESETS (Winter Sun / Sunset / Blue Hour)
+    // =========================================================================
+    const LIGHT_PRESETS = {
+      noon: {
+        sunDir: new THREE.Vector3(-0.76, 0.44, 0.47).normalize(),
+        sunColor: 0xfff7ec,
+        sunIntensity: 3.15,
+        hemiSky: 0x7eb4f2,
+        hemiGround: 0x8ea4bc,
+        hemiIntensity: 0.94,
+        zenith: 0x356fc2,
+        midSky: 0x6ea0de,
+        horizon: 0xcce0f5,
+        cloudTint: 0xdde8f5,
+        fogColor: 0xc5dbf0,
+        exposure: 1.05,
+        snowTint: 0xf7faff,
+        autoBeam: false
+      },
+      sunset: {
+        sunDir: new THREE.Vector3(-0.88, 0.16, 0.45).normalize(),
+        sunColor: 0xffa75e,
+        sunIntensity: 3.3,
+        hemiSky: 0x627ba8,
+        hemiGround: 0x5c4b4e,
+        hemiIntensity: 0.68,
+        zenith: 0x26447a,
+        midSky: 0x8d6e82,
+        horizon: 0xf2a572,
+        cloudTint: 0xffbfa0,
+        fogColor: 0xd99e7e,
+        exposure: 1.0,
+        snowTint: 0xfff0e4,
+        autoBeam: false
+      },
+      twilight: {
+        sunDir: new THREE.Vector3(-0.82, 0.05, -0.55).normalize(),
+        sunColor: 0x7898cc,
+        sunIntensity: 0.75,
+        hemiSky: 0x2c4a78,
+        hemiGround: 0x1e2c3e,
+        hemiIntensity: 0.58,
+        zenith: 0x0b1a36,
+        midSky: 0x1e3862,
+        horizon: 0x4f6c94,
+        cloudTint: 0x657c9e,
+        fogColor: 0x374f72,
+        exposure: 1.12,
+        snowTint: 0xbfd4f0,
+        autoBeam: true
+      }
+    };
+
+    const chkBeam = document.getElementById('chk-beam');
+    const chkSnow = document.getElementById('chk-snow');
+
+    function setBeamEnabled(enabled) {
+      beamPivot.visible = enabled;
+      lampCoreMat.emissiveIntensity = enabled ? 4.8 : 0.45;
+      beaconPointLight.intensity = enabled ? 18.0 : 0.0;
+      chkBeam.checked = enabled;
+    }
+
+    function applyLightPreset(key) {
+      const p = LIGHT_PRESETS[key];
+      sunLight.position.copy(p.sunDir).multiplyScalar(95);
+      sunLight.color.setHex(p.sunColor);
+      sunLight.intensity = p.sunIntensity;
+
+      hemiLight.color.setHex(p.hemiSky);
+      hemiLight.groundColor.setHex(p.hemiGround);
+      hemiLight.intensity = p.hemiIntensity;
+
+      skyUniforms.uSunDir.value.copy(p.sunDir);
+      skyUniforms.uZenithColor.value.setHex(p.zenith);
+      skyUniforms.uMidSkyColor.value.setHex(p.midSky);
+      skyUniforms.uHorizonColor.value.setHex(p.horizon);
+      skyUniforms.uSunColor.value.setHex(p.sunColor);
+      skyUniforms.uCloudTint.value.setHex(p.cloudTint);
+
+      oceanUniforms.uSunColor.value.setHex(p.sunColor);
+      terrainUniforms.uSnowTint.value.setHex(p.snowTint);
+
+      scene.fog.color.setHex(p.fogColor);
+      renderer.toneMappingExposure = p.exposure;
+      setBeamEnabled(p.autoBeam);
+      updateEnvironment();
+    }
+
+    applyLightPreset('noon');
+
+    // =========================================================================
+    // 15. SMOOTH CAMERA TRANSITIONS & UI HANDLERS
+    // =========================================================================
+    let camTransition = null;
+    function goToPreset(key) {
+      const targetPreset = CAM_PRESETS[key];
+      if (!targetPreset) return;
+      camTransition = {
+        startPos: camera.position.clone(),
+        endPos: targetPreset.pos.clone(),
+        startTarget: controls.target.clone(),
+        endTarget: targetPreset.target.clone(),
+        progress: 0
+      };
+    }
+
+    document.querySelectorAll('[data-cam]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-cam]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        goToPreset(btn.dataset.cam);
+      });
+    });
+
+    document.querySelectorAll('[data-light]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-light]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyLightPreset(btn.dataset.light);
+      });
+    });
+
+    chkBeam.addEventListener('change', (e) => setBeamEnabled(e.target.checked));
+    chkSnow.addEventListener('change', (e) => { snowPoints.visible = e.target.checked; });
+
+    // Cancel camera transition if user manually grabs controls
+    controls.addEventListener('start', () => { camTransition = null; });
+
+    const hudEl = document.getElementById('hud');
+    const toggleHudBtn = document.getElementById('toggle-hud');
+    toggleHudBtn.addEventListener('click', () => {
+      hudEl.classList.toggle('collapsed');
+      toggleHudBtn.textContent = hudEl.classList.contains('collapsed') ? '+' : '−';
+    });
+
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // =========================================================================
+    // 16. RENDER LOOP
+    // =========================================================================
     const clock = new THREE.Clock();
 
     function animate() {
       requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
       const elapsed = clock.getElapsedTime();
 
-      skyUniforms.uTime.value = elapsed;
       oceanUniforms.uTime.value = elapsed;
-      grassUniforms.uTime.value = elapsed;
+      skyUniforms.uTime.value = elapsed;
+      terrainUniforms.uTime.value = elapsed;
 
-      if (fresnelLensGroup) {
-        fresnelLensGroup.rotation.y = elapsed * 0.35;
+      if (beamPivot.visible) {
+        beamPivot.rotation.y = elapsed * 0.65;
+      }
+
+      if (snowPoints.visible) {
+        const sp = snowGeo.attributes.position.array;
+        for (let i = 0; i < snowCount; i++) {
+          sp[i * 3]     += Math.sin(elapsed * 0.7 + snowSeeds[i]) * dt * 0.9 + dt * 0.75;
+          sp[i * 3 + 1] -= dt * (1.8 + (i % 5) * 0.25);
+          if (sp[i * 3 + 1] < 0.2) {
+            sp[i * 3 + 1] = 34.0;
+            sp[i * 3] = (Math.random() - 0.5) * 90;
+          }
+          if (sp[i * 3] > 45) sp[i * 3] = -45;
+        }
+        snowGeo.attributes.position.needsUpdate = true;
+      }
+
+      if (camTransition) {
+        camTransition.progress = Math.min(1, camTransition.progress + dt * 1.15);
+        const t = camTransition.progress;
+        const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        camera.position.lerpVectors(camTransition.startPos, camTransition.endPos, ease);
+        controls.target.lerpVectors(camTransition.startTarget, camTransition.endTarget, ease);
+        if (camTransition.progress >= 1) camTransition = null;
       }
 
       controls.update();
       renderer.render(scene, camera);
     }
 
+    // Hide loading screen once first frame is ready
+    renderer.render(scene, camera);
+    document.getElementById('loading').classList.add('hidden');
     animate();
   </script>
 </body>
