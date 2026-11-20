@@ -93,7 +93,13 @@ def main():
         d = os.path.join(ROOT, "samples", s)
         print(f"{s}: calling {MODEL} ...")
         resp = call(s, key)
-        with open(os.path.join(d, "model_response.json"), "w") as f:
+        latest = os.path.join(d, "model_response.json")
+        if os.path.exists(latest):  # keep earlier attempts as a record
+            n = 1
+            while os.path.exists(os.path.join(d, f"model_response_attempt{n}.json")):
+                n += 1
+            os.rename(latest, os.path.join(d, f"model_response_attempt{n}.json"))
+        with open(latest, "w") as f:
             json.dump(resp, f, indent=1)
         served = resp.get("model", "?")
         if served != MODEL:
