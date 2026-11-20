@@ -1,0 +1,167 @@
+[
+ {
+  "n": "G1",
+  "m": true,
+  "mc": "Opens in Chrome and renders the grove with no errors."
+ },
+ {
+  "n": "G2",
+  "m": false,
+  "mc": "Orbit works, but OrbitControls has no polar angle limit, so the camera can be dragged below the ground plane."
+ },
+ {
+  "n": "G3",
+  "m": true,
+  "mc": "Runs smoothly on a standard laptop."
+ },
+ {
+  "n": "1",
+  "m": true,
+  "mc": "No UI, text or buttons. Orbit is the only input."
+ },
+ {
+  "n": "2",
+  "m": true,
+  "mc": "Stalk sway, canopy rustle and floating motes run from load with no input."
+ },
+ {
+  "n": "3",
+  "m": false,
+  "mc": "Low upward angle is close, but the framing differs: the hero stalks sit on the right instead of center left, and the tree mass is placed differently."
+ },
+ {
+  "n": "4",
+  "m": true,
+  "mc": "Stalk spacing and density are close to the photo."
+ },
+ {
+  "n": "5",
+  "m": false,
+  "mc": "Palette is near black with neon green. The photo’s yellow green canopy and pale gray green stalks are missing."
+ },
+ {
+  "n": "6",
+  "m": false,
+  "mc": "No path and no brushwood fence. The ground is a flat disc."
+ },
+ {
+  "n": "7",
+  "m": false,
+  "mc": "The photo has bright diffuse overcast light. The scene is underexposed and stalks read as dark silhouettes."
+ },
+ {
+  "n": "8",
+  "m": true,
+  "mc": "Node rings are visible at regular intervals on the near stalks."
+ },
+ {
+  "n": "9",
+  "m": true,
+  "mc": "Stalk thickness and height vary."
+ },
+ {
+  "n": "10",
+  "m": true,
+  "mc": "Stalks lean at slightly varied angles, not a perfect grid."
+ },
+ {
+  "n": "11",
+  "m": false,
+  "mc": "Canopy uses star shaped, maple like leaf sprites in saturated green, not narrow bamboo leaves."
+ },
+ {
+  "n": "12",
+  "m": false,
+  "mc": "Ground is a flat circle with a tinted bark texture. No soil or fallen leaves."
+ },
+ {
+  "n": "13",
+  "m": false,
+  "mc": "The floor is a 45 m disc with fog. The edge of the grove shows when orbiting out."
+ },
+ {
+  "n": "14",
+  "m": false,
+  "mc": "No dappled sunlight patches on stalks or ground."
+ },
+ {
+  "n": "15",
+  "m": false,
+  "mc": "Fog is too dark to read as depth, and there are no soft light shafts between stalks."
+ },
+ {
+  "n": "16",
+  "m": true,
+  "mc": "Upper canopy leaves glow with backlight."
+ },
+ {
+  "n": "17",
+  "m": false,
+  "mc": "Large areas between stalks crush to pure black."
+ },
+ {
+  "n": "18",
+  "m": false,
+  "mc": "Stalks are dark and uniform with a plastic highlight streak. No waxy bloom or yellowing visible."
+ },
+ {
+  "n": "19",
+  "m": true,
+  "mc": "Leaves read as backlit and light passes through them."
+ },
+ {
+  "n": "20",
+  "m": false,
+  "mc": "Ground material is bark texture, not soil, leaves or stones."
+ },
+ {
+  "n": "21",
+  "m": true,
+  "mc": "No unwanted roll. Convergence matches the upward view of the photo."
+ },
+ {
+  "n": "22",
+  "m": true,
+  "mc": "Canopy sways in the wind."
+ },
+ {
+  "n": "23",
+  "m": true,
+  "mc": "Bend increases with height, so stalks curve more at the top."
+ },
+ {
+  "n": "24",
+  "m": false,
+  "mc": "Wind is a sum of steady sine waves with no gust envelope, so the motion reads periodic."
+ },
+ {
+  "n": "25",
+  "m": true,
+  "mc": "Dust motes float through the scene."
+ },
+ {
+  "n": "26",
+  "m": true,
+  "mc": "Motion runs at real speed on a continuous clock with no visible jumps."
+ },
+ {
+  "n": "27",
+  "m": true,
+  "mc": "Stalks are procedurally varied with no obvious clones."
+ },
+ {
+  "n": "28",
+  "m": true,
+  "mc": "No popping or flicker seen while orbiting."
+ },
+ {
+  "n": "29",
+  "m": true,
+  "mc": "Leaves do not clip through the stalks."
+ },
+ {
+  "n": "30",
+  "m": false,
+  "mc": "Too dark and too saturated to pass for the photo at a glance."
+ }
+]
