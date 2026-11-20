@@ -1,0 +1,167 @@
+[
+ {
+  "n": "G1",
+  "m": false,
+  "mc": "The ocean fragment shader does not compile because it reads p.z from a vec2. The console shows shader errors and the ocean never draws, so the space beyond the rocks is empty sky."
+ },
+ {
+  "n": "G2",
+  "m": false,
+  "mc": "The polar limit keeps the camera above the ground, but the max distance lets it pull back past the terrain edge. From there the headland reads as a flat slab floating in empty sky."
+ },
+ {
+  "n": "G3",
+  "m": true,
+  "mc": "The load is moderate, one shadow map, one terrain mesh, procedural sky and simple primitives. A standard laptop should hold 30 fps."
+ },
+ {
+  "n": "1",
+  "m": true,
+  "mc": "No UI, no text and no buttons. Orbit is the only interaction."
+ },
+ {
+  "n": "2",
+  "m": true,
+  "mc": "Clouds drift, the grass sways, snow drifts and the lens turns as soon as the page loads."
+ },
+ {
+  "n": "3",
+  "m": false,
+  "mc": "The horizon sits higher than in the photo and the tower is smaller in frame. The rock outcrops that fill the photo’s foreground are replaced by a snow slope."
+ },
+ {
+  "n": "4",
+  "m": true,
+  "mc": "White octagonal tapered tower, red lantern and cap, white gallery rail. The colours and silhouette read as the photo, though the model adds a small gabled porch that the photo doesn’t have."
+ },
+ {
+  "n": "5",
+  "m": false,
+  "mc": "The shore reads as a smooth snow field. The boulders render dark red and magenta because their vertex colour data gets multiplied into the rock colour, so it doesn’t read as a snowy granite shore."
+ },
+ {
+  "n": "6",
+  "m": false,
+  "mc": "The ocean shader fails to compile, so no sea is visible beyond the rocks."
+ },
+ {
+  "n": "7",
+  "m": true,
+  "mc": "Clear blue gradient sky with a pale horizon and low sun from the left, as in the photo."
+ },
+ {
+  "n": "8",
+  "m": true,
+  "mc": "Slender tapered octagonal shaft with the lantern on top, close to the photo’s proportions."
+ },
+ {
+  "n": "9",
+  "m": true,
+  "mc": "The lantern has glazed panes with red mullions and a white railing gallery around it."
+ },
+ {
+  "n": "10",
+  "m": false,
+  "mc": "The boulders are noise-displaced spheres with a faceted low-poly look and no real cracks. The crack lines on the terrain are only painted on."
+ },
+ {
+  "n": "11",
+  "m": false,
+  "mc": "The right whaleback bump is added after the plinth pad is flattened, so the ground rises up to about 0.4 m around the base and buries it unevenly. One boulder also overlaps the tower base."
+ },
+ {
+  "n": "12",
+  "m": false,
+  "mc": "There is no ocean, so orbiting shows the edge of the terrain slab against empty sky."
+ },
+ {
+  "n": "13",
+  "m": true,
+  "mc": "One directional sun with a shadow map, and all shadows fall to the right."
+ },
+ {
+  "n": "14",
+  "m": true,
+  "mc": "The tower shows a lit left face and a cool grey shaded side, and it is not blown out."
+ },
+ {
+  "n": "15",
+  "m": false,
+  "mc": "The sky has a haze band, but with the sea missing there is no sea horizon fading into it. The distant coast reads as a flat grey slab."
+ },
+ {
+  "n": "16",
+  "m": true,
+  "mc": "No area is fully black or clipped to white. The darkest parts are the red boulders in shadow."
+ },
+ {
+  "n": "17",
+  "m": false,
+  "mc": "Pure white flat shaded paint with no grime, streaks or wear. It reads as clean plastic."
+ },
+ {
+  "n": "18",
+  "m": false,
+  "mc": "The snow is plausible, but the rock reads as glossy red plastic and there is no darker wet rock at the waterline."
+ },
+ {
+  "n": "19",
+  "m": false,
+  "mc": "The glass is a 38% opacity pane with no environment map, so it is see-through but reflects no sky."
+ },
+ {
+  "n": "20",
+  "m": false,
+  "mc": "The ocean is not drawn. Even in the shader code, the water colour comes only from noise, with no shift by depth."
+ },
+ {
+  "n": "21",
+  "m": true,
+  "mc": "The horizon is level and the camera has no roll."
+ },
+ {
+  "n": "22",
+  "m": false,
+  "mc": "The ocean doesn’t render, so no waves are visible."
+ },
+ {
+  "n": "23",
+  "m": false,
+  "mc": "There is no visible sea and no spray system at all, so nothing breaks on the rocks."
+ },
+ {
+  "n": "24",
+  "m": false,
+  "mc": "The foam lives inside the ocean shader that fails to compile, so no foam shows."
+ },
+ {
+  "n": "25",
+  "m": true,
+  "mc": "Snow drifts across the rock from left to right and the grass tufts sway in the wind."
+ },
+ {
+  "n": "26",
+  "m": true,
+  "mc": "Motion runs on a real time clock at believable speeds, and the drifting snow wraps with a fade, so nothing jumps."
+ },
+ {
+  "n": "27",
+  "m": false,
+  "mc": "The ocean is missing, so this can’t be judged as a pass."
+ },
+ {
+  "n": "28",
+  "m": false,
+  "mc": "There are no spray particles in the scene. The only particles are small snow points."
+ },
+ {
+  "n": "29",
+  "m": false,
+  "mc": "No water is drawn, so the terrain edge drops into empty sky instead of meeting the sea with foam."
+ },
+ {
+  "n": "30",
+  "m": false,
+  "mc": "Red boulders, the missing ocean and the plain snow foreground make the paused frame read clearly as CG, not as the photo."
+ }
+]
