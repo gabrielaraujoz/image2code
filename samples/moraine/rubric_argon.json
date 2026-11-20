@@ -1,0 +1,162 @@
+[
+ {
+  "n": "G1",
+  "m": true,
+  "mc": "Opens and renders with no errors. Needs internet for three.js from unpkg. The missing reference.jpg falls back to the procedural look."
+ },
+ {
+  "n": "G2",
+  "m": false,
+  "mc": "Orbit works, but ±68° azimuth, zoom out to 320 and pan let the camera leave the scene. From the side the terrain and lake are thin shells with cut edges over an empty void."
+ },
+ {
+  "n": "G3",
+  "m": true,
+  "mc": "Light scene, around 100k triangles and about 800 instanced trees in two passes. Should run above 30 fps on a standard laptop."
+ },
+ {
+  "n": "1",
+  "m": true,
+  "mc": "No UI or text, only orbit."
+ },
+ {
+  "n": "2",
+  "m": true,
+  "mc": "Clouds, tree sway and water ripples start on load with no input."
+ },
+ {
+  "n": "3",
+  "m": true,
+  "mc": "Broadly matches, eye level, lake in the lower half, peaks across the top. The left cliff and the peaks are smaller than in the photo, and the lake takes more of the frame."
+ },
+ {
+  "n": "4",
+  "m": false,
+  "mc": "The water is a pale greyish blue, about  #6B8E91, not the deep saturated glacial teal of the photo."
+ },
+ {
+  "n": "5",
+  "m": true,
+  "mc": "The skyline follows the photo’s peak profile, though the peaks read softer and less jagged."
+ },
+ {
+  "n": "6",
+  "m": true,
+  "mc": "Snow sits on the couloir and the summits where the photo has it, though it is drawn as horizontal dashes."
+ },
+ {
+  "n": "7",
+  "m": true,
+  "mc": "Conifers line the right shore and the far center, as in the photo."
+ },
+ {
+  "n": "8",
+  "m": true,
+  "mc": "Sunrise sky with orange caps on the two end peaks, matching the time of day."
+ },
+ {
+  "n": "9",
+  "m": false,
+  "mc": "Mountains are flat vertical ribbons painted with horizontal stripes. No ridges, gullies or depth."
+ },
+ {
+  "n": "10",
+  "m": false,
+  "mc": "Every tree is the same low-poly cone with the same color and little height change. The forest reads as a uniform carpet."
+ },
+ {
+  "n": "11",
+  "m": false,
+  "mc": "The shoreline is a knife edge where the flat terrain meets the water, with no rocks or debris. There is also a dark triangular notch at the center of the shore."
+ },
+ {
+  "n": "12",
+  "m": false,
+  "mc": "Orbiting shows the cut edges of the terrain strips and the empty sky under the lake and the cliff."
+ },
+ {
+  "n": "13",
+  "m": false,
+  "mc": "Color is painted, not lit. Only the two orange caps read as sun. There is no shading from a sun direction and no cooler shade in the valley."
+ },
+ {
+  "n": "14",
+  "m": false,
+  "mc": "Distant peaks are as sharp and as saturated as the near cliff. No atmospheric haze."
+ },
+ {
+  "n": "15",
+  "m": true,
+  "mc": "No pure black or blown white areas."
+ },
+ {
+  "n": "16",
+  "m": false,
+  "mc": "No shadows anywhere. Trees and scree sit on flat color with no contact shadow."
+ },
+ {
+  "n": "17",
+  "m": false,
+  "mc": "At the default view the lake shows no visible reflection of the mountains or the sky. It reads as a flat gradient."
+ },
+ {
+  "n": "18",
+  "m": false,
+  "mc": "The water is a smooth flat gradient, with no lighter, clearer water near the shore."
+ },
+ {
+  "n": "19",
+  "m": false,
+  "mc": "Rock is regular sine stripes and noise blobs, with no real rock texture at the default view."
+ },
+ {
+  "n": "20",
+  "m": false,
+  "mc": "Snow is flat grey white dashes plus a straight stripe for the couloir. It reads as paint."
+ },
+ {
+  "n": "21",
+  "m": true,
+  "mc": "The horizon is level."
+ },
+ {
+  "n": "22",
+  "m": false,
+  "mc": "The ripple code runs, but with no visible reflection the water looks still. There is no distortion to see."
+ },
+ {
+  "n": "23",
+  "m": false,
+  "mc": "The mist over the lake has about 5% opacity and is practically invisible. The cloud ribbons only swing back and forth."
+ },
+ {
+  "n": "24",
+  "m": true,
+  "mc": "Tree tops sway gently on a slow sine."
+ },
+ {
+  "n": "25",
+  "m": false,
+  "mc": "The clouds oscillate back and forth on a sine instead of drifting one way, which reads as a loop and not as wind."
+ },
+ {
+  "n": "26",
+  "m": false,
+  "mc": "The mountain stripes are regular sine bands that repeat across the whole range."
+ },
+ {
+  "n": "27",
+  "m": false,
+  "mc": "All trees share one mesh with only rotation and scale changes. Identical copies sit next to each other."
+ },
+ {
+  "n": "28",
+  "m": true,
+  "mc": "36° FOV, no fisheye, no post effects."
+ },
+ {
+  "n": "29",
+  "m": false,
+  "mc": "A paused frame reads as a flat illustration, not as the photo."
+ }
+]
