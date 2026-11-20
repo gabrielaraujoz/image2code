@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bamboo Grove — Live Photograph</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #061107;
+      cursor: grab;
+    }
+    body:active {
+      cursor: grabbing;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+    // -------------------------------------------------------------------------
+    // Deterministic PRNG & Noise Utilities
+    // -------------------------------------------------------------------------
+    function createPRNG(seed = 1337) {
+      let s = seed >>> 0;
+      return function rand() {
+        s += 0x6D2B79F5;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const rand = createPRNG(749201);
+
+    function hash2(x, y) {
+      const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+      return h - Math.floor(h);
+    }
+
+    function noise2D(x, y) {
+      const ix = Math.floor(x);
+      const iy = Math.floor(y);
+      const fx = x - ix;
+      const fy = y - iy;
+      const ux = fx * fx * (3.0 - 2.0 * fx);
+      const uy = fy * fy * (3.0 - 2.0 * fy);
+      const a = hash2(ix, iy);
+      const b = hash2(ix + 1, iy);
+      const c = hash2(ix, iy + 1);
+      const d = hash2(ix + 1, iy + 1);
+      return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+    }
+
+    function fbm2D(x, y, octaves = 4) {
+      let val = 0.0;
+      let amp = 0.5;
+      let freq = 1.0;
+      for (let i = 0; i < octaves; i++) {
+        val += amp * noise2D(x * freq, y * freq);
+        freq *= 2.03;
+        amp *= 0.5;
+      }
+      return val;
+    }
+
+    // -------------------------------------------------------------------------
+    // Scene, Camera, Renderer, and Post-Processing Setup
+    // -------------------------------------------------------------------------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xdff5e3);
+    // Subtle atmospheric depth haze inside the tall bamboo grove
+    scene.fog = new THREE.FogExp2(0x1f3d23, 0.011);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    // Camera positioned near the base of the grove looking steeply up (58 deg pitch)
+    // with a slight right-tilted up vector so the zenith convergence point sits at
+    // (u ~ 0.595, v ~ 0.945), matching the exact perspective convergence of reference.jpg
+    const camera = new THREE.PerspectiveCamera(
+      66,
+      window.innerWidth / window.innerHeight,
+      0.15,
+      160
+    );
+
+    const pitchRad = THREE.MathUtils.degToRad(58.0);
+    const orbitDist = 6.5;
+    const camPos = new THREE.Vector3(0.0, 1.35, 0.0);
+    const lookDir = new THREE.Vector3(0.0, Math.sin(pitchRad), -Math.cos(pitchRad)).normalize();
+    const camTarget = camPos.clone().addScaledVector(lookDir, orbitDist);
+
+    camera.position.copy(camPos);
+    // Slight roll so the zenith (0,1,0) projects to upper-center-right (~59.5% X, ~94% Y)
+    camera.up.set(0.185, 0.982, -0.025).normalize();
+    camera.lookAt(camTarget);
+
+    // OrbitControls — dragging orbits smoothly around the mid-grove target
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.copy(camTarget);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.055;
+    controls.enablePan = false;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 24.0;
+    controls.rotateSpeed = 0.65;
+    controls.update();
+
+    // Camera-space basis vectors at initial framing (used to place hero stalks accurately)
+    camera.updateMatrixWorld(true);
+    const camRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    const camUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    const camForward = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2).negate().normalize();
+
+    // Helper: compute world (X, Z) at y = camPos.y so that a vertical stalk (X, y, Z)
+    // passes through a specific screen point (u, v) at distance `distAtPoint`
+    function screenRayToHorizontalXZ(u, v, refHeightAboveEye) {
+      const ndcX = u * 2.0 - 1.0;
+      const ndcY = v * 2.0 - 1.0;
+      const halfFovTan = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      const refAspect = 1.5; // 3:2 reference aspect ratio of reference.jpg
+      const rayDir = new THREE.Vector3()
+        .copy(camForward)
+        .addScaledVector(camRight, ndcX * refAspect * halfFovTan)
+        .addScaledVector(camUp, ndcY * halfFovTan)
+        .normalize();
+      const dy = Math.max(0.08, rayDir.y);
+      const t = refHeightAboveEye / dy;
+      return {
+        x: camPos.x + rayDir.x * t,
+        z: camPos.z + rayDir.z * t
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // Post-Processing: Soft Canopy Bloom + Wide-Angle Photographic Grading
+    // -------------------------------------------------------------------------
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.32, // subtle halation around bright white sky gaps
+      0.65, // radius
+      0.86  // threshold so only bright sky & intense backlit leaf rims bloom
+    );
+    composer.addPass(bloomPass);
+
+    const PhotoGradeShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        uTime: { value: 0.0 }
+      },
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform sampler2D tDiffuse;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 uv = vUv;
+          vec2 centered = uv - 0.5;
+          float r2 = dot(centered, centered);
+
+          // Subtle wide-angle optical chromatic fringe near edges (like reference lens)
+          vec2 caOffset = centered * r2 * 0.0045;
+          float r = texture2D(tDiffuse, uv + caOffset).r;
+          float g = texture2D(tDiffuse, uv).g;
+          float b = texture2D(tDiffuse, uv - caOffset * 1.2).b;
+          vec3 col = vec3(r, g, b);
+
+          // Natural corner vignetting matching the wide-angle lens falloff in reference.jpg
+          float cornerDist = length(centered * vec2(1.12, 1.0));
+          float vig = 1.0 - smoothstep(0.28, 0.86, cornerDist);
+          col *= mix(0.46, 1.0, vig);
+
+          // Extra lower-left and lower-right dark optical falloff
+          float bottomEdge = smoothstep(0.0, 0.32, uv.y);
+          float sideEdge = smoothstep(0.0, 0.18, uv.x) * (1.0 - smoothstep(0.82, 1.0, uv.x));
+          col *= mix(0.76, 1.0, mix(bottomEdge, 1.0, 0.5) * mix(sideEdge, 1.0, 0.65));
+
+          // Photographic S-curve contrast and lush emerald/sage color balance
+          col = clamp(col, 0.0, 1.0);
+          col = pow(col, vec3(0.95, 0.93, 0.97));
+          col = smoothstep(-0.015, 1.01, col);
+
+          // Very subtle film grain for photographic micro-texture
+          float grain = fract(sin(dot(uv * vec2(1380.0, 920.0) + uTime * 0.1, vec2(12.9898, 78.233))) * 43758.5453);
+          col += (grain - 0.5) * 0.011;
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    };
+    const gradePass = new ShaderPass(PhotoGradeShader);
+    composer.addPass(gradePass);
+
+    // -------------------------------------------------------------------------
+    // Lighting Setup
+    // -------------------------------------------------------------------------
+    // Strong zenith sky hemisphere light (bright white-cyan sky above, deep forest floor below)
+    const hemiLight = new THREE.HemisphereLight(0xeef9ee, 0x0b1f0d, 1.45);
+    hemiLight.position.set(0, 50, 0);
+    scene.add(hemiLight);
+
+    // Main directional skylight streaming from the bright upper-left/center canopy slot
+    const skySlotLight = new THREE.DirectionalLight(0xf6fff2, 2.1);
+    skySlotLight.position.set(-8.0, 38.0, -7.0);
+    scene.add(skySlotLight);
+
+    // Secondary emerald bounce light from sunlit foliage on the left/center
+    const canopyBounceLight = new THREE.DirectionalLight(0x7be041, 0.85);
+    canopyBounceLight.position.set(-12.0, 22.0, -4.0);
+    scene.add(canopyBounceLight);
+
+    // Subtle cool sage fill from upper right so cylindrical shading wraps smoothly
+    const sageFillLight = new THREE.DirectionalLight(0x8ec4ab, 0.55);
+    sageFillLight.position.set(6.0, 18.0, 4.0);
+    scene.add(sageFillLight);
+
+    // Shared animation uniform for all custom shaders
+    const globalUniforms = {
+      uTime: { value: 0.0 }
+    };
+
+    // -------------------------------------------------------------------------
+    // PART 2: PROCEDURAL TEXTURES (Bamboo Internode, Bump, Foliage & Bark)
+    // -------------------------------------------------------------------------
+    function createBambooTextures() {
+      const w = 512;
+      const h = 1024;
+      const colorCanvas = document.createElement('canvas');
+      colorCanvas.width = w;
+      colorCanvas.height = h;
+      const ctx = colorCanvas.getContext('2d');
+
+      const bumpCanvas = document.createElement('canvas');
+      bumpCanvas.width = w;
+      bumpCanvas.height = h;
+      const bctx = bumpCanvas.getContext('2d');
+
+      const imgData = ctx.createImageData(w, h);
+      const bumpData = bctx.createImageData(w, h);
+      const data = imgData.data;
+      const bdata = bumpData.data;
+
+      // Precompute circumferential fiber streaks so texture tiles seamlessly horizontally
+      const fiberStreaks = new Float32Array(w);
+      const fineStreaks = new Float32Array(w);
+      for (let x = 0; x < w; x++) {
+        const u = x / w;
+        const angle = u * Math.PI * 2.0;
+        fiberStreaks[x] =
+          0.5 * Math.sin(angle * 19.0 + 0.4) +
+          0.3 * Math.cos(angle * 47.0 - 1.2) +
+          0.2 * Math.sin(angle * 113.0 + 2.5);
+        fineStreaks[x] =
+          0.6 * Math.sin(angle * 210.0) +
+          0.4 * Math.cos(angle * 380.0 + 0.8);
+      }
+
+      for (let y = 0; y < h; y++) {
+        // v = 0 is top of internode (just under upper node), v = 1 is bottom of internode
+        // In canvas y=0 is top (v_uv = 1.0 in Three.js default flipY=true), so let's work in v_uv:
+        const v = 1.0 - y / (h - 1);
+
+        // Distance from node ring at v=0 and v=1
+        const dBot = v;
+        const dTop = 1.0 - v;
+        const dNode = Math.min(dBot, dTop);
+
+        // Powdery white-sage waxy bloom (pruina) strongest just below upper node (v in 0.72..0.965)
+        const pruinaBand = Math.pow(THREE.MathUtils.clamp((v - 0.52) / 0.44, 0.0, 1.0), 1.45) *
+                           (1.0 - THREE.MathUtils.smoothstep(v, 0.955, 0.985));
+
+        // Slight darker olive shading right above lower node (v in 0.03..0.16)
+        const lowerShade = Math.exp(-Math.pow((v - 0.055) / 0.065, 2.0)) * 0.28;
+
+        for (let x = 0; x < w; x++) {
+          const u = x / w;
+          const idx = (y * w + x) * 4;
+
+          // Seamless horizontal noise coordinates
+          const nx = Math.cos(u * Math.PI * 2.0) * 2.2 + 5.0;
+          const ny = Math.sin(u * Math.PI * 2.0) * 2.2 + 5.0;
+          const organicMottle = fbm2D(nx * 2.5, v * 6.0 + ny * 1.5, 4);
+          const microGrain = noise2D(nx * 18.0 + fineStreaks[x] * 2.0, v * 36.0);
+
+          // Base Moso bamboo celadon / bluish-sage green RGB
+          let r = 82.0 + organicMottle * 22.0 + fiberStreaks[x] * 5.5 + (microGrain - 0.5) * 7.0;
+          let g = 132.0 + organicMottle * 26.0 + fiberStreaks[x] * 7.5 + (microGrain - 0.5) * 9.0;
+          let b = 109.0 + organicMottle * 20.0 + fiberStreaks[x] * 6.0 + (microGrain - 0.5) * 7.5;
+
+          // Apply powdery waxy bloom (silvery sage-celadon highlight below upper node)
+          const pruinaVar = pruinaBand * (0.72 + 0.28 * organicMottle + 0.08 * fiberStreaks[x]);
+          r = THREE.MathUtils.lerp(r, 168.0, pruinaVar * 0.58);
+          g = THREE.MathUtils.lerp(g, 202.0, pruinaVar * 0.58);
+          b = THREE.MathUtils.lerp(b, 184.0, pruinaVar * 0.58);
+
+          // Apply lower-internode olive darkening
+          r *= (1.0 - lowerShade * 0.45);
+          g *= (1.0 - lowerShade * 0.35);
+          b *= (1.0 - lowerShade * 0.48);
+
+          // Occasional tiny natural lichen/weathering flecks
+          const fleckNoise = noise2D(nx * 14.0 + 31.7, v * 28.0 + 11.3);
+          if (fleckNoise > 0.83) {
+            const fAmt = (fleckNoise - 0.83) / 0.17;
+            r = THREE.MathUtils.lerp(r, 145.0, fAmt * 0.45);
+            g = THREE.MathUtils.lerp(g, 168.0, fAmt * 0.45);
+            b = THREE.MathUtils.lerp(b, 142.0, fAmt * 0.45);
+          } else if (fleckNoise < 0.13) {
+            const dAmt = (0.13 - fleckNoise) / 0.13;
+            r *= (1.0 - dAmt * 0.38);
+            g *= (1.0 - dAmt * 0.32);
+            b *= (1.0 - dAmt * 0.40);
+          }
+
+          // Node ring details (double ridge + dark charcoal sheath scar groove at dNode < 0.042)
+          let bumpVal = 128.0 + fineStreaks[x] * 14.0 + (microGrain - 0.5) * 16.0;
+          const nodeWave = 0.0025 * Math.sin(u * Math.PI * 4.0 + 1.1) + 0.0015 * (organicMottle - 0.5);
+          const dn = Math.max(0.0, dNode + nodeWave);
+
+          if (dn < 0.048) {
+            // Double lip ridge and deep nodal groove
+            const groove = Math.exp(-Math.pow((dn - 0.011) / 0.0085, 2.0));
+            const upperLip = Math.exp(-Math.pow((dn - 0.026) / 0.009, 2.0));
+            const corkLine = Math.exp(-Math.pow((dn - 0.003) / 0.004, 2.0));
+
+            // Dark charcoal-olive node ring
+            r = THREE.MathUtils.lerp(r, 20.0 + organicMottle * 12.0, groove * 0.88);
+            g = THREE.MathUtils.lerp(g, 31.0 + organicMottle * 14.0, groove * 0.88);
+            b = THREE.MathUtils.lerp(b, 22.0 + organicMottle * 10.0, groove * 0.88);
+
+            // Subtle pale brownish-sage ridge highlight
+            r = THREE.MathUtils.lerp(r, 122.0, upperLip * 0.32);
+            g = THREE.MathUtils.lerp(g, 148.0, upperLip * 0.32);
+            b = THREE.MathUtils.lerp(b, 120.0, upperLip * 0.32);
+
+            // Thin dry sheath scar line right at the joint
+            r = THREE.MathUtils.lerp(r, 92.0, corkLine * 0.55);
+            g = THREE.MathUtils.lerp(g, 88.0, corkLine * 0.55);
+            b = THREE.MathUtils.lerp(b, 68.0, corkLine * 0.55);
+
+            bumpVal += upperLip * 85.0 - groove * 95.0 + corkLine * 40.0;
+          }
+
+          data[idx] = THREE.MathUtils.clamp(Math.round(r), 0, 255);
+          data[idx + 1] = THREE.MathUtils.clamp(Math.round(g), 0, 255);
+          data[idx + 2] = THREE.MathUtils.clamp(Math.round(b), 0, 255);
+          data[idx + 3] = 255;
+
+          const bClamped = THREE.MathUtils.clamp(Math.round(bumpVal), 0, 255);
+          bdata[idx] = bClamped;
+          bdata[idx + 1] = bClamped;
+          bdata[idx + 2] = bClamped;
+          bdata[idx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      bctx.putImageData(bumpData, 0, 0);
+
+      const colorTex = new THREE.CanvasTexture(colorCanvas);
+      colorTex.wrapS = THREE.RepeatWrapping;
+      colorTex.wrapT = THREE.RepeatWrapping;
+      colorTex.colorSpace = THREE.SRGBColorSpace;
+      colorTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+      const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+      bumpTex.wrapS = THREE.RepeatWrapping;
+      bumpTex.wrapT = THREE.RepeatWrapping;
+      bumpTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+      return { colorTex, bumpTex };
+    }
+
+    // Intricate feathery bamboo leaf cluster texture + broad deciduous canopy texture
+    function createFoliageSprayTexture(mode = 'bamboo') {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const localRand = createPRNG(mode === 'bamboo' ? 918273 : (mode === 'maple' ? 445566 : 778899));
+
+      ctx.clearRect(0, 0, size, size);
+
+      // Draw fine dark twigs radiating from center/base
+      const twigCount = mode === 'lace' ? 28 : 16;
+      for (let t = 0; t < twigCount; t++) {
+        const startAng = localRand() * Math.PI * 2.0;
+        const startR = localRand() * 90.0;
+        const cx = size * 0.5 + Math.cos(startAng) * startR;
+        const cy = size * 0.5 + Math.sin(startAng) * startR;
+        const endAng = startAng + (localRand() - 0.5) * 1.1;
+        const len = 180.0 + localRand() * 260.0;
+        const ex = cx + Math.cos(endAng) * len;
+        const ey = cy + Math.sin(endAng) * len;
+        const mx = (cx + ex) * 0.5 + (localRand() - 0.5) * 70.0;
+        const my = (cy + ey) * 0.5 + (localRand() - 0.5) * 70.0;
+
+        ctx.strokeStyle = `rgba(18, 34, 15, 0.92)`;
+        ctx.lineWidth = 2.2 + localRand() * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.quadraticCurveTo(mx, my, ex, ey);
+        ctx.stroke();
+      }
+
+      // Draw hundreds of sharp lanceolate bamboo leaves or serrated maple/deciduous leaves
+      const sprayCount = mode === 'bamboo' ? 95 : (mode === 'maple' ? 110 : 165);
+      for (let s = 0; s < sprayCount; s++) {
+        // Distribute inside circular disk with soft outer density falloff
+        const rad = Math.pow(localRand(), 0.62) * (size * 0.43);
+        const theta = localRand() * Math.PI * 2.0;
+        const sx = size * 0.5 + Math.cos(theta) * rad;
+        const sy = size * 0.5 + Math.sin(theta) * rad;
+        const baseDir = theta + (localRand() - 0.5) * 1.4;
+
+        if (mode === 'maple') {
+          // Palmate / broadleaf cluster
+          const leafScale = 22.0 + localRand() * 26.0;
+          const shade = localRand();
+          const rCol = Math.round(THREE.MathUtils.lerp(28, 158, shade));
+          const gCol = Math.round(THREE.MathUtils.lerp(78, 238, shade));
+          const bCol = Math.round(THREE.MathUtils.lerp(18, 52, shade));
+
+          for (let lobe = -2; lobe <= 2; lobe++) {
+            const lAng = baseDir + lobe * 0.42 + (localRand() - 0.5) * 0.08;
+            const lLen = leafScale * (1.0 - Math.abs(lobe) * 0.17);
+            const lWid = lLen * 0.27;
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(lAng);
+            ctx.fillStyle = `rgb(${rCol}, ${gCol}, ${bCol})`;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(lLen * 0.45, -lWid, lLen, 0);
+            ctx.quadraticCurveTo(lLen * 0.45, lWid, 0, 0);
+            ctx.fill();
+            ctx.restore();
+          }
+        } else {
+          // Feathery fan of 5 to 8 slender pointed bamboo leaves
+          const blades = 5 + Math.floor(localRand() * 4);
+          const shade = localRand();
+          const rCol = Math.round(THREE.MathUtils.lerp(20, 146, shade));
+          const gCol = Math.round(THREE.MathUtils.lerp(66, 226, shade));
+          const bCol = Math.round(THREE.MathUtils.lerp(16, 48, shade));
+
+          for (let b = 0; b < blades; b++) {
+            const fanFrac = (b / (blades - 1)) - 0.5;
+            const bAng = baseDir + fanFrac * 1.15 + (localRand() - 0.5) * 0.12;
+            const bLen = (mode === 'lace' ? 42.0 : 54.0) + localRand() * 48.0;
+            const bWid = 4.8 + localRand() * 4.2;
+
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(bAng);
+
+            const grad = ctx.createLinearGradient(0, 0, bLen, 0);
+            grad.addColorStop(0.0, `rgb(${Math.max(10, rCol - 18)}, ${Math.max(30, gCol - 24)}, ${Math.max(8, bCol - 10)})`);
+            grad.addColorStop(0.65, `rgb(${rCol}, ${gCol}, ${bCol})`);
+            grad.addColorStop(1.0, `rgb(${Math.min(255, rCol + 35)}, ${Math.min(255, gCol + 28)}, ${Math.min(255, bCol + 20)})`);
+
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(bLen * 0.36, -bWid, bLen, 0);
+            ctx.quadraticCurveTo(bLen * 0.36, bWid, 0, 0);
+            ctx.fill();
+
+            // Subtle midrib vein
+            ctx.strokeStyle = `rgba(180, 240, 110, 0.28)`;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(2, 0);
+            ctx.lineTo(bLen * 0.85, 0);
+            ctx.stroke();
+
+            ctx.restore();
+          }
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return tex;
+    }
+
+    function createBarkTexture() {
+      const w = 256;
+      const h = 512;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const d = img.data;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const u = x / w;
+          const v = y / h;
+          const n = fbm2D(Math.cos(u * Math.PI * 2.0) * 3.0 + 2.0, v * 14.0, 4);
+          const moss = fbm2D(u * 6.0 + 9.1, v * 6.0 + 3.4, 3);
+          const mossMask = THREE.MathUtils.smoothstep(moss, 0.52, 0.76);
+          const r = THREE.MathUtils.lerp(18 + n * 24, 42 + n * 35, mossMask);
+          const g = THREE.MathUtils.lerp(22 + n * 26, 74 + n * 48, mossMask);
+          const b = THREE.MathUtils.lerp(16 + n * 18, 28 + n * 22, mossMask);
+          const i = (y * w + x) * 4;
+          d[i] = r;
+          d[i + 1] = g;
+          d[i + 2] = b;
+          d[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    const bambooTextures = createBambooTextures();
+    const bambooLeafTex = createFoliageSprayTexture('bamboo');
+    const mapleLeafTex = createFoliageSprayTexture('maple');
+    const canopyLaceTex = createFoliageSprayTexture('lace');
+    const barkTex = createBarkTexture();
+    // -------------------------------------------------------------------------
+    // PART 3: BAMBOO GROVE GEOMETRY, SHADER & EXACT STALK PLACEMENT
+    // -------------------------------------------------------------------------
+    // Helper: place a stalk at exact horizontal distance `horizDist` along the azimuth
+    // defined by normalized screen coordinates (u, v) in the initial reference view
+    function screenAzimuthToWorldXZ(u, v, horizDist) {
+      const ndcX = u * 2.0 - 1.0;
+      const ndcY = v * 2.0 - 1.0;
+      const halfFovTan = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      const refAspect = 1.5;
+      const rayDir = new THREE.Vector3()
+        .copy(camForward)
+        .addScaledVector(camRight, ndcX * refAspect * halfFovTan)
+        .addScaledVector(camUp, ndcY * halfFovTan);
+      const horizVec = new THREE.Vector2(rayDir.x, rayDir.z);
+      if (horizVec.lengthSq() < 1e-6) horizVec.set(0, -1);
+      horizVec.normalize().multiplyScalar(horizDist);
+      return {
+        x: camPos.x + horizVec.x,
+        z: camPos.z + horizVec.y
+      };
+    }
+
+    // Build a high-detail segmented bamboo culm geometry with physical 3D nodal ridges
+    function createSegmentedBambooGeometry(height, baseRadius, topRadius, avgNodeLen, curveX, curveZ, radialSegs = 22) {
+      const numSegments = Math.max(8, Math.round(height / avgNodeLen));
+      const rings = [];
+
+      // Ring profile within each internode: subtle node collar bulge, nodal groove, and smooth wall
+      const subProfile = [
+        { t: 0.000, rScale: 0.976 }, // nodal sheath groove center
+        { t: 0.016, rScale: 1.042 }, // lower nodal ridge lip
+        { t: 0.042, rScale: 1.008 }, // collar taper
+        { t: 0.250, rScale: 0.994 }, // lower-mid internode
+        { t: 0.600, rScale: 0.992 }, // upper-mid internode
+        { t: 0.958, rScale: 1.012 }, // pre-node swell
+        { t: 0.984, rScale: 1.052 }  // upper nodal ridge lip
+      ];
+
+      let currentY = 0.0;
+      for (let s = 0; s < numSegments; s++) {
+        // Slightly shorter segments near the ground, slightly longer mid-culm
+        const segFactor = 0.82 + 0.32 * Math.sin(Math.min(1.0, s / numSegments) * Math.PI * 0.85);
+        const segLen = (height / numSegments) * segFactor;
+
+        for (let p = 0; p < subProfile.length; p++) {
+          const prof = subProfile[p];
+          const y = currentY + prof.t * segLen;
+          const hFrac = THREE.MathUtils.clamp(y / height, 0.0, 1.0);
+          const smoothRadius = THREE.MathUtils.lerp(baseRadius, topRadius, Math.pow(hFrac, 0.88));
+          rings.push({
+            y,
+            hFrac,
+            radius: smoothRadius * prof.rScale,
+            uvY: s + prof.t
+          });
+        }
+        currentY += segLen;
+      }
+      // Final cap ring at top
+      rings.push({
+        y: currentY,
+        hFrac: 1.0,
+        radius: topRadius * 0.98,
+        uvY: numSegments
+      });
+
+      const ringCount = rings.length;
+      const vertCount = ringCount * (radialSegs + 1);
+      const positions = new Float32Array(vertCount * 3);
+      const normals = new Float32Array(vertCount * 3);
+      const uvs = new Float32Array(vertCount * 2);
+      const indices = [];
+
+      for (let r = 0; r < ringCount; r++) {
+        const ring = rings[r];
+        const hFrac = ring.hFrac;
+        // Smooth natural quadratic/cubic arch of the tall bamboo stalk
+        const bendFactor = Math.pow(hFrac, 1.65);
+        const cx = curveX * bendFactor;
+        const cz = curveZ * bendFactor;
+
+        // Estimate slope for accurate normal tilt at nodal ridges
+        const prevRing = rings[Math.max(0, r - 1)];
+        const nextRing = rings[Math.min(ringCount - 1, r + 1)];
+        const dy = Math.max(0.0005, nextRing.y - prevRing.y);
+        const dr = nextRing.radius - prevRing.radius;
+        const slopeY = -dr / dy;
+
+        for (let c = 0; c <= radialSegs; c++) {
+          const u = c / radialSegs;
+          const theta = u * Math.PI * 2.0;
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+
+          const vx = cx + cosT * ring.radius;
+          const vy = ring.y;
+          const vz = cz + sinT * ring.radius;
+
+          const nx = cosT;
+          const ny = THREE.MathUtils.clamp(slopeY * 0.55, -0.65, 0.65);
+          const nz = sinT;
+          const nLen = Math.hypot(nx, ny, nz);
+
+          const vIdx = r * (radialSegs + 1) + c;
+          positions[vIdx * 3] = vx;
+          positions[vIdx * 3 + 1] = vy;
+          positions[vIdx * 3 + 2] = vz;
+
+          normals[vIdx * 3] = nx / nLen;
+          normals[vIdx * 3 + 1] = ny / nLen;
+          normals[vIdx * 3 + 2] = nz / nLen;
+
+          uvs[vIdx * 2] = u;
+          uvs[vIdx * 2 + 1] = ring.uvY;
+        }
+      }
+
+      for (let r = 0; r < ringCount - 1; r++) {
+        for (let c = 0; c < radialSegs; c++) {
+          const a = r * (radialSegs + 1) + c;
+          const b = a + radialSegs + 1;
+          const d = a + 1;
+          const e = b + 1;
+          indices.push(a, b, d);
+          indices.push(b, e, d);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      return geo;
+    }
+
+    // Create custom bamboo material with wind vertex bending, waxy pruina skylight wrap,
+    // base moss/weathering, and subtle carved markings on the closest right hero stalk
+    function createBambooMaterial(options = {}) {
+      const {
+        tint = new THREE.Color(0x7aa48f),
+        pruinaStrength = 0.65,
+        swayAmp = 1.0,
+        swayPhase = 0.0,
+        hasCarving = false
+      } = options;
+
+      const mat = new THREE.MeshStandardMaterial({
+        map: bambooTextures.colorTex,
+        bumpMap: bambooTextures.bumpTex,
+        bumpScale: 0.0085,
+        roughness: 0.42,
+        metalness: 0.04,
+        color: tint
+      });
+
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = globalUniforms.uTime;
+        shader.uniforms.uPruina = { value: pruinaStrength };
+        shader.uniforms.uSwayAmp = { value: swayAmp };
+        shader.uniforms.uSwayPhase = { value: swayPhase };
+        shader.uniforms.uHasCarving = { value: hasCarving ? 1.0 : 0.0 };
+
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <common>',
+          /* glsl */`
+          #include <common>
+          uniform float uTime;
+          uniform float uSwayAmp;
+          uniform float uSwayPhase;
+          varying float vWorldY;
+          varying vec3 vWorldNormal;
+          varying vec2 vBambooUv;
+          `
+        );
+
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          /* glsl */`
+          #include <begin_vertex>
+          vBambooUv = uv;
+          float hNorm = clamp(position.y / 26.0, 0.0, 1.2);
+          float bendProfile = pow(hNorm, 1.85) * uSwayAmp;
+          float w1 = sin(uTime * 0.62 + uSwayPhase) * 0.22;
+          float w2 = cos(uTime * 1.18 + uSwayPhase * 1.7 + position.y * 0.08) * 0.07;
+          float w3 = sin(uTime * 0.48 + uSwayPhase * 0.8) * 0.16;
+          transformed.x += (w1 + w2) * bendProfile;
+          transformed.z += (w3 + w2 * 0.6) * bendProfile;
+          vec4 wp = modelMatrix * vec4(transformed, 1.0);
+          vWorldY = wp.y;
+          vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);
+          `
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <common>',
+          /* glsl */`
+          #include <common>
+          uniform float uPruina;
+          uniform float uHasCarving;
+          varying float vWorldY;
+          varying vec3 vWorldNormal;
+          varying vec2 vBambooUv;
+          `
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          /* glsl */`
+          #include <map_fragment>
+          // Sky slot direction (upper-left-center bright canopy opening)
+          vec3 skySlotDir = normalize(vec3(-0.62, 0.58, -0.52));
+          float skyFacing = clamp(dot(normalize(vWorldNormal), skySlotDir) * 0.5 + 0.5, 0.0, 1.0);
+
+          // Internode fractional position (0 at lower node, 1 at upper node)
+          float segV = fract(vBambooUv.y);
+          float nodeProx = min(segV, 1.0 - segV);
+          float isInternode = smoothstep(0.018, 0.055, nodeProx);
+
+          // Powdery celadon-white bloom (pruina) strongest on upper-mid segments facing skylight
+          float heightPruina = smoothstep(1.8, 4.8, vWorldY);
+          float segPruina = smoothstep(0.35, 0.94, segV) * isInternode;
+          vec3 pruinaCol = vec3(0.62, 0.78, 0.69);
+          float pruinaMask = heightPruina * (0.35 + 0.65 * segPruina) * pow(skyFacing, 1.15) * uPruina;
+          diffuseColor.rgb = mix(diffuseColor.rgb, pruinaCol, clamp(pruinaMask * 0.68, 0.0, 0.75));
+
+          // Cylindrical wrap shadow on side facing away from the sky slot
+          float coreShadow = 1.0 - smoothstep(0.08, 0.58, skyFacing);
+          diffuseColor.rgb *= mix(1.06, 0.34, coreShadow);
+
+          // Deeper mossy olive weathering on lowest segments near the bottom of frame (vWorldY < 2.35)
+          float baseWeather = 1.0 - smoothstep(1.45, 2.55, vWorldY);
+          float mottle = fract(sin(dot(floor(vBambooUv * vec2(28.0, 18.0)), vec2(12.9898, 78.233))) * 43758.5453);
+          vec3 baseMossCol = mix(vec3(0.09, 0.21, 0.11), vec3(0.24, 0.36, 0.19), mottle * 0.65);
+          diffuseColor.rgb = mix(diffuseColor.rgb, baseMossCol, baseWeather * 0.58 * isInternode);
+
+          // Faint tan weathered/scratched markings on the bottom-right hero stalk (matching reference.jpg)
+          if (uHasCarving > 0.5 && vWorldY > 1.52 && vWorldY < 1.92) {
+            float uBand = smoothstep(0.18, 0.22, vBambooUv.x) * (1.0 - smoothstep(0.42, 0.46, vBambooUv.x));
+            float vBand = smoothstep(1.56, 1.61, vWorldY) * (1.0 - smoothstep(1.74, 1.79, vWorldY));
+            float glyph = step(0.58, fract(sin(dot(floor(vBambooUv * vec2(65.0, 42.0)), vec2(41.1, 97.3))) * 19341.7));
+            float markMask = uBand * vBand * glyph * 0.55;
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.56, 0.49, 0.33), markMask);
+          }
+          `
+        );
+      };
+
+      return mat;
+    }
+
+    const bambooGroup = new THREE.Group();
+    scene.add(bambooGroup);
+
+    // Helper to spawn a customized bamboo stalk from screen-calibrated parameters
+    function addCalibratedStalk(cfg) {
+      const posXZ = screenAzimuthToWorldXZ(cfg.u, cfg.v, cfg.dist);
+      const height = cfg.height || 26.5;
+      const baseR = cfg.radius || 0.075;
+      const topR = baseR * (cfg.taper || 0.34);
+      const nodeLen = cfg.nodeLen || 0.39;
+      const curveX = cfg.curveX !== undefined ? cfg.curveX : (rand() - 0.5) * 0.45;
+      const curveZ = cfg.curveZ !== undefined ? cfg.curveZ : (rand() - 0.5) * 0.45;
+
+      const geo = createSegmentedBambooGeometry(
+        height,
+        baseR,
+        topR,
+        nodeLen,
+        curveX,
+        curveZ,
+        cfg.radialSegs || 22
+      );
+
+      const mat = createBambooMaterial({
+        tint: cfg.tint || new THREE.Color(0x7aa48f),
+        pruinaStrength: cfg.pruina !== undefined ? cfg.pruina : 0.68,
+        swayAmp: cfg.swayAmp !== undefined ? cfg.swayAmp : 1.0,
+        swayPhase: rand() * Math.PI * 2.0,
+        hasCarving: !!cfg.hasCarving
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(posXZ.x, cfg.yOffset || 0.0, posXZ.z);
+      mesh.rotation.y = cfg.rotY !== undefined ? cfg.rotY : rand() * Math.PI * 2.0;
+      if (cfg.leanX) mesh.rotation.z = -cfg.leanX;
+      if (cfg.leanZ) mesh.rotation.x = cfg.leanZ;
+      bambooGroup.add(mesh);
+      return mesh;
+    }
+
+    // 1. HERO FOREGROUND STALKS (calibrated directly to reference.jpg)
+    const heroStalkConfigs = [
+      // Center Hero Stalk: rises from bottom-center (u~0.405) up-right to crown (u~0.583, v~0.89)
+      {
+        u: 0.435, v: 0.16, dist: 1.44, radius: 0.084, height: 27.5, nodeLen: 0.40,
+        curveX: 0.18, curveZ: -0.12, pruina: 0.85, radialSegs: 28,
+        tint: new THREE.Color(0x88b39e), leanX: 0.012, leanZ: -0.008
+      },
+      // Main Front-Right Hero Stalk (thickest, whitish-sage upper internodes, carved marks at base)
+      {
+        u: 0.815, v: 0.20, dist: 1.18, radius: 0.091, height: 28.0, nodeLen: 0.39,
+        curveX: -0.22, curveZ: -0.14, pruina: 0.94, radialSegs: 28,
+        tint: new THREE.Color(0x89b29d), hasCarving: true, rotY: 1.15, leanX: -0.015
+      },
+      // Right-Cluster Inner Companion (just left of Main Front-Right Hero Stalk)
+      {
+        u: 0.735, v: 0.16, dist: 1.56, radius: 0.076, height: 27.0, nodeLen: 0.38,
+        curveX: -0.16, curveZ: -0.10, pruina: 0.72, radialSegs: 24,
+        tint: new THREE.Color(0x6d9982), leanX: -0.010
+      },
+      // Right-Cluster Outer Companion (closely paired on the right of Main Front-Right Hero)
+      {
+        u: 0.915, v: 0.18, dist: 1.32, radius: 0.082, height: 26.8, nodeLen: 0.40,
+        curveX: -0.24, curveZ: -0.08, pruina: 0.78, radialSegs: 24,
+        tint: new THREE.Color(0x749f89), leanX: -0.018
+      },
+      // Far Bottom-Right Edge Companion
+      {
+        u: 0.985, v: 0.16, dist: 1.68, radius: 0.074, height: 26.0, nodeLen: 0.39,
+        curveX: -0.18, curveZ: -0.12, pruina: 0.65, radialSegs: 20,
+        tint: new THREE.Color(0x628c76)
+      },
+      // Upper-Right Diagonal Hero Stalk (enters right frame edge around v=0.72, sweeps to top-center)
+      {
+        u: 0.945, v: 0.74, dist: 1.52, radius: 0.079, height: 27.5, nodeLen: 0.39,
+        curveX: -0.28, curveZ: 0.12, pruina: 0.88, radialSegs: 24,
+        tint: new THREE.Color(0x82ab97), leanX: -0.022
+      },
+      // Very Top-Right Corner Stalk (sweeps across top-right corner v=0.92..1.0)
+      {
+        u: 0.92, v: 0.935, dist: 1.48, radius: 0.074, height: 27.0, nodeLen: 0.38,
+        curveX: -0.32, curveZ: 0.18, pruina: 0.82, radialSegs: 22,
+        tint: new THREE.Color(0x7ca692), leanX: -0.028
+      },
+      // Mid-Right Diagonal Stalk (enters right edge around v=0.52)
+      {
+        u: 0.96, v: 0.54, dist: 2.08, radius: 0.072, height: 26.5, nodeLen: 0.39,
+        curveX: -0.20, curveZ: 0.05, pruina: 0.70, radialSegs: 20,
+        tint: new THREE.Color(0x6c9680)
+      },
+      // Left-of-Center Hero Companion 1 (rises from u=0.305 at bottom toward crown)
+      {
+        u: 0.335, v: 0.14, dist: 2.02, radius: 0.072, height: 26.5, nodeLen: 0.39,
+        curveX: 0.22, curveZ: -0.10, pruina: 0.74, radialSegs: 22,
+        tint: new THREE.Color(0x739e88), leanX: 0.015
+      },
+      // Left-of-Center Hero Companion 2 (rises from u=0.235 at bottom)
+      {
+        u: 0.268, v: 0.14, dist: 2.22, radius: 0.068, height: 26.0, nodeLen: 0.38,
+        curveX: 0.25, curveZ: -0.08, pruina: 0.68, radialSegs: 20,
+        tint: new THREE.Color(0x69947d), leanX: 0.018
+      },
+      // Left-of-Center Hero Companion 3 (rises from u=0.16 at bottom)
+      {
+        u: 0.195, v: 0.14, dist: 2.38, radius: 0.066, height: 25.8, nodeLen: 0.38,
+        curveX: 0.26, curveZ: -0.06, pruina: 0.65, radialSegs: 20,
+        tint: new THREE.Color(0x628c75), leanX: 0.020
+      },
+      // Center-Gap Vertical Midground Stalks (between Center Hero and Right Hero Cluster)
+      {
+        u: 0.564, v: 0.16, dist: 2.85, radius: 0.066, height: 26.5, nodeLen: 0.39,
+        curveX: 0.04, curveZ: -0.08, pruina: 0.68, radialSegs: 20,
+        tint: new THREE.Color(0x6b9680)
+      },
+      {
+        u: 0.622, v: 0.18, dist: 2.42, radius: 0.072, height: 27.0, nodeLen: 0.39,
+        curveX: -0.05, curveZ: -0.10, pruina: 0.74, radialSegs: 22,
+        tint: new THREE.Color(0x749f89)
+      },
+      {
+        u: 0.668, v: 0.16, dist: 3.15, radius: 0.064, height: 26.0, nodeLen: 0.38,
+        curveX: -0.08, curveZ: -0.08, pruina: 0.62, radialSegs: 18,
+        tint: new THREE.Color(0x608973)
+      }
+    ];
+
+    for (const cfg of heroStalkConfigs) {
+      addCalibratedStalk(cfg);
+    }
+
+    // 2. DENSE LEFT-SIDE DIAGONAL BAMBOO WALL (sweeping from bottom-left & mid-left toward zenith)
+    for (let i = 0; i < 52; i++) {
+      const frac = i / 52;
+      // Span u from -0.06 to 0.39 and v from -0.04 to 0.46 (keeps upper-left sky slot open)
+      const u = -0.05 + (i % 13) * 0.034 + (rand() - 0.5) * 0.018;
+      const v = -0.02 + Math.floor(i / 13) * 0.115 + (rand() - 0.5) * 0.04;
+      const dist = 2.45 + rand() * 5.6 + (1.0 - frac) * 0.8;
+      const radius = THREE.MathUtils.lerp(0.064, 0.046, (dist - 2.4) / 6.5);
+      addCalibratedStalk({
+        u, v, dist,
+        radius,
+        height: 24.5 + rand() * 3.5,
+        nodeLen: 0.36 + rand() * 0.06,
+        curveX: 0.18 + rand() * 0.22,
+        curveZ: (rand() - 0.5) * 0.25,
+        pruina: 0.45 + rand() * 0.35,
+        radialSegs: dist < 4.2 ? 16 : 12,
+        tint: new THREE.Color().setHSL(0.39 + (rand() - 0.5) * 0.03, 0.22 + rand() * 0.10, 0.36 + rand() * 0.16),
+        leanX: 0.015 + rand() * 0.018
+      });
+    }
+
+    // Upper-left bamboo stalks peeking behind the deciduous tree branches (v in 0.58..0.82, u in 0.0..0.14)
+    for (let i = 0; i < 7; i++) {
+      addCalibratedStalk({
+        u: 0.01 + i * 0.021,
+        v: 0.60 + (i % 3) * 0.075,
+        dist: 3.1 + (i % 3) * 0.75,
+        radius: 0.058,
+        height: 25.0,
+        nodeLen: 0.38,
+        curveX: 0.24,
+        pruina: 0.62,
+        radialSegs: 14,
+        tint: new THREE.Color(0x6e9882),
+        leanX: 0.022
+      });
+    }
+
+    // 3. CENTER & RIGHT BACKGROUND BAMBOO CURTAIN (creating deep vertical density)
+    for (let i = 0; i < 58; i++) {
+      const u = 0.44 + rand() * 0.58;
+      const v = -0.02 + rand() * 0.62;
+      const dist = 3.2 + Math.pow(rand(), 0.75) * 7.8;
+      const radius = THREE.MathUtils.lerp(0.062, 0.044, (dist - 3.2) / 7.8);
+      addCalibratedStalk({
+        u, v, dist,
+        radius,
+        height: 24.0 + rand() * 4.0,
+        nodeLen: 0.36 + rand() * 0.06,
+        pruina: 0.38 + rand() * 0.35,
+        radialSegs: dist < 5.2 ? 14 : 10,
+        tint: new THREE.Color().setHSL(0.38 + (rand() - 0.5) * 0.04, 0.24 + rand() * 0.12, 0.32 + rand() * 0.18)
+      });
+    }
+
+    // 4. 360-DEGREE SURROUND GROVE (so orbiting around in any direction reveals a complete bamboo forest)
+    for (let i = 0; i < 75; i++) {
+      const angle = rand() * Math.PI * 2.0;
+      // Focus behind and to the sides of the initial frustum
+      const forwardDot = -Math.sin(angle);
+      if (forwardDot > 0.35) continue;
+      const dist = 2.6 + rand() * 9.5;
+      const x = camPos.x + Math.cos(angle) * dist;
+      const z = camPos.z + Math.sin(angle) * dist;
+      const radius = 0.052 + rand() * 0.026;
+      const geo = createSegmentedBambooGeometry(
+        24.5 + rand() * 3.5,
+        radius,
+        radius * 0.35,
+        0.38 + rand() * 0.05,
+        (rand() - 0.5) * 0.4,
+        (rand() - 0.5) * 0.4,
+        12
+      );
+      const mat = createBambooMaterial({
+        tint: new THREE.Color().setHSL(0.38, 0.25, 0.38 + rand() * 0.14),
+        pruinaStrength: 0.55,
+        swayAmp: 1.0,
+        swayPhase: rand() * Math.PI * 2.0
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, 0, z);
+      mesh.rotation.y = rand() * Math.PI * 2.0;
+      bambooGroup.add(mesh);
+    }
+    // -------------------------------------------------------------------------
+    // PART 4: SKY DOME, GNARLED UPPER-LEFT TREE, MULTI-LAYERED CANOPY & FLOOR
+    // -------------------------------------------------------------------------
+    // Helper: project a normalized screen point (u, v) at distance `depthDist` along its camera ray
+    function screenPointToWorld3D(u, v, depthDist) {
+      const ndcX = u * 2.0 - 1.0;
+      const ndcY = v * 2.0 - 1.0;
+      const halfFovTan = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      const refAspect = 1.5;
+      const rayDir = new THREE.Vector3()
+        .copy(camForward)
+        .addScaledVector(camRight, ndcX * refAspect * halfFovTan)
+        .addScaledVector(camUp, ndcY * halfFovTan)
+        .normalize();
+      return camPos.clone().addScaledVector(rayDir, depthDist);
+    }
+
+    // 1. LUMINOUS OVEREXPOSED SKY DOME WITH SUBTLE DRIFTING CLOUDS
+    const skyGeo = new THREE.SphereGeometry(110, 40, 28);
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uTime: globalUniforms.uTime
+      },
+      vertexShader: /* glsl */`
+        varying vec3 vWorldDir;
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldDir = normalize(wp.xyz);
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform float uTime;
+        varying vec3 vWorldDir;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+
+        void main() {
+          float elev = clamp(vWorldDir.y, -0.2, 1.0);
+          // High-key luminous white sky overhead so canopy gaps glow with photographic halation
+          vec3 zenithSky = vec3(1.22, 1.26, 1.22);
+          vec3 midSky = vec3(0.95, 1.05, 0.92);
+          vec3 lowGrove = vec3(0.06, 0.16, 0.07);
+
+          vec2 cloudUv = vWorldDir.xz / (max(0.15, vWorldDir.y + 0.35)) * 1.8 + vec2(uTime * 0.014, -uTime * 0.009);
+          float c = noise(cloudUv) * 0.65 + noise(cloudUv * 2.3 + 4.1) * 0.35;
+          vec3 upperCol = mix(midSky, zenithSky, smoothstep(0.08, 0.45, elev));
+          upperCol *= (0.94 + 0.14 * c);
+
+          vec3 col = mix(lowGrove, upperCol, smoothstep(-0.05, 0.24, elev));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyMesh);
+
+    // 2. FOREST FLOOR (for complete 360° realism when orbiting downward)
+    const floorGeo = new THREE.CircleGeometry(45, 48);
+    floorGeo.rotateX(-Math.PI * 0.5);
+    const floorMat = new THREE.MeshStandardMaterial({
+      map: barkTex,
+      color: new THREE.Color(0x162914),
+      roughness: 0.92,
+      metalness: 0.02
+    });
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.position.y = 0.0;
+    scene.add(floorMesh);
+
+    // 3. GNARLED UPPER-LEFT DECIDUOUS TREE LIMBS & TWIGS (matching top-left of reference.jpg)
+    function createTaperedBranchGeometry(points, rStart, rEnd, tubularSegs = 36, radialSegs = 12) {
+      const curve = new THREE.CatmullRomCurve3(points);
+      const frames = curve.computeFrenetFrames(tubularSegs, false);
+      const vertCount = (tubularSegs + 1) * (radialSegs + 1);
+      const pos = new Float32Array(vertCount * 3);
+      const norm = new Float32Array(vertCount * 3);
+      const uvs = new Float32Array(vertCount * 2);
+      const indices = [];
+
+      const p = new THREE.Vector3();
+      const v = new THREE.Vector3();
+      for (let i = 0; i <= tubularSegs; i++) {
+        const t = i / tubularSegs;
+        curve.getPointAt(t, p);
+        const radius = THREE.MathUtils.lerp(rStart, rEnd, Math.pow(t, 0.85));
+        const N = frames.normals[i];
+        const B = frames.binormals[i];
+
+        for (let j = 0; j <= radialSegs; j++) {
+          const u = j / radialSegs;
+          const ang = u * Math.PI * 2.0;
+          const cosA = Math.cos(ang);
+          const sinA = Math.sin(ang);
+
+          v.copy(N).multiplyScalar(cosA).addScaledVector(B, sinA).normalize();
+          const idx = i * (radialSegs + 1) + j;
+          pos[idx * 3] = p.x + v.x * radius;
+          pos[idx * 3 + 1] = p.y + v.y * radius;
+          pos[idx * 3 + 2] = p.z + v.z * radius;
+
+          norm[idx * 3] = v.x;
+          norm[idx * 3 + 1] = v.y;
+          norm[idx * 3 + 2] = v.z;
+
+          uvs[idx * 2] = u;
+          uvs[idx * 2 + 1] = t * 6.0;
+        }
+      }
+
+      for (let i = 0; i < tubularSegs; i++) {
+        for (let j = 0; j < radialSegs; j++) {
+          const a = i * (radialSegs + 1) + j;
+          const b = a + radialSegs + 1;
+          const c = a + 1;
+          const d = b + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      return geo;
+    }
+
+    const branchMat = new THREE.MeshStandardMaterial({
+      map: barkTex,
+      color: new THREE.Color(0x182115),
+      roughness: 0.88,
+      metalness: 0.02
+    });
+    branchMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = globalUniforms.uTime;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>\nuniform float uTime;`
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         float sway = sin(uTime * 0.75 + position.x * 0.4) * 0.045;
+         transformed.x += sway;
+         transformed.y += cos(uTime * 0.9 + position.z * 0.4) * 0.025;`
+      );
+    };
+
+    const treeBranchesGroup = new THREE.Group();
+    scene.add(treeBranchesGroup);
+
+    const branchPaths = [
+      // Main thick dark gnarled bough across top-left corner (u=0.0..0.37, v=0.90..0.99)
+      {
+        rStart: 0.24, rEnd: 0.025,
+        pts: [
+          screenPointToWorld3D(-0.04, 0.93, 6.2),
+          screenPointToWorld3D(0.06, 0.91, 6.4),
+          screenPointToWorld3D(0.16, 0.925, 6.6),
+          screenPointToWorld3D(0.23, 0.93, 6.8),
+          screenPointToWorld3D(0.30, 0.91, 7.0),
+          screenPointToWorld3D(0.37, 0.985, 7.2)
+        ]
+      },
+      // Upper fork curving to top edge (u=0.18..0.28, v=0.93..1.01)
+      {
+        rStart: 0.11, rEnd: 0.02,
+        pts: [
+          screenPointToWorld3D(0.16, 0.925, 6.6),
+          screenPointToWorld3D(0.21, 0.96, 6.7),
+          screenPointToWorld3D(0.25, 1.01, 6.9)
+        ]
+      },
+      // Crooked secondary limb reaching down-right into the bright sky opening (u=0.06..0.32, v=0.91..0.73)
+      {
+        rStart: 0.13, rEnd: 0.016,
+        pts: [
+          screenPointToWorld3D(0.05, 0.91, 6.4),
+          screenPointToWorld3D(0.12, 0.87, 6.6),
+          screenPointToWorld3D(0.175, 0.84, 6.8),
+          screenPointToWorld3D(0.22, 0.79, 7.0),
+          screenPointToWorld3D(0.27, 0.74, 7.2),
+          screenPointToWorld3D(0.32, 0.73, 7.3),
+          screenPointToWorld3D(0.305, 0.77, 7.3)
+        ]
+      },
+      // Hooked sub-twig branching at (u=0.17, v=0.84) down to (u=0.17, v=0.76)
+      {
+        rStart: 0.055, rEnd: 0.014,
+        pts: [
+          screenPointToWorld3D(0.165, 0.845, 6.8),
+          screenPointToWorld3D(0.16, 0.79, 6.9),
+          screenPointToWorld3D(0.18, 0.76, 7.0)
+        ]
+      },
+      // Fine twig curving from (u=0.23, v=0.92) out to (u=0.29, v=0.87)
+      {
+        rStart: 0.05, rEnd: 0.012,
+        pts: [
+          screenPointToWorld3D(0.22, 0.92, 6.8),
+          screenPointToWorld3D(0.26, 0.88, 7.0),
+          screenPointToWorld3D(0.30, 0.89, 7.1)
+        ]
+      },
+      // Lower-left dark deciduous branch entering at (u=0.0, v=0.63) to (u=0.14, v=0.73)
+      {
+        rStart: 0.15, rEnd: 0.022,
+        pts: [
+          screenPointToWorld3D(-0.03, 0.62, 6.6),
+          screenPointToWorld3D(0.04, 0.67, 6.8),
+          screenPointToWorld3D(0.09, 0.71, 7.0),
+          screenPointToWorld3D(0.14, 0.72, 7.2)
+        ]
+      }
+    ];
+
+    for (const bp of branchPaths) {
+      const bGeo = createTaperedBranchGeometry(bp.pts, bp.rStart, bp.rEnd);
+      const bMesh = new THREE.Mesh(bGeo, branchMat);
+      treeBranchesGroup.add(bMesh);
+    }
+
+    // 4. MULTI-LAYERED BACKLIT CANOPY FOLIAGE (Bamboo Sprays, Sunlit Maple & Lace Silhouettes)
+    function createCanopyFoliageMaterial(tex, alphaCutoff = 0.28) {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uMap: { value: tex },
+          uTime: globalUniforms.uTime,
+          uAlphaCutoff: { value: alphaCutoff }
+        },
+        side: THREE.DoubleSide,
+        transparent: true,
+        depthWrite: true,
+        vertexShader: /* glsl */`
+          attribute vec3 aInstanceColor;
+          attribute float aPhase;
+          uniform float uTime;
+          varying vec2 vUv;
+          varying vec3 vColor;
+          varying float vBacklight;
+
+          void main() {
+            vUv = uv;
+            vColor = aInstanceColor;
+
+            vec4 worldPos = instanceMatrix * vec4(position, 1.0);
+            // Continuous wind rustle & gentle canopy breathing
+            float breeze = sin(uTime * 1.15 + aPhase + worldPos.x * 0.22) * 0.14;
+            float flutter = cos(uTime * 2.85 + aPhase * 2.3 + uv.x * 4.5 + uv.y * 3.5) * 0.045;
+            worldPos.x += breeze + flutter;
+            worldPos.z += breeze * 0.7 - flutter;
+            worldPos.y += sin(uTime * 1.6 + aPhase) * 0.04;
+
+            // Backlight intensity stronger higher up and toward the upper-left sky channel
+            vBacklight = smoothstep(7.0, 22.0, worldPos.y);
+            gl_Position = projectionMatrix * viewMatrix * worldPos;
+          }
+        `,
+        fragmentShader: /* glsl */`
+          uniform sampler2D uMap;
+          uniform float uAlphaCutoff;
+          varying vec2 vUv;
+          varying vec3 vColor;
+          varying float vBacklight;
+
+          void main() {
+            vec4 texel = texture2D(uMap, vUv);
+            if (texel.a < uAlphaCutoff) discard;
+
+            // Modulate procedural leaf texture with instance color & translucent rim glow
+            vec3 leafCol = texel.rgb * vColor * 1.85;
+            float edgeGlow = (1.0 - smoothstep(uAlphaCutoff, 0.85, texel.a)) * vBacklight;
+            vec3 sssCol = vec3(0.74, 0.98, 0.30);
+            leafCol = mix(leafCol, sssCol, edgeGlow * 0.48);
+
+            gl_FragColor = vec4(leafCol, texel.a);
+          }
+        `
+      });
+    }
+
+    // Check if a screen coordinate (u, v) falls inside the main bright white sky openings
+    function isInsideSkyOpening(u, v) {
+      // Main diagonal upper-left sky slot from (0.12, 0.52) to (0.52, 0.97)
+      const t = THREE.MathUtils.clamp((u - 0.11) / 0.41, 0.0, 1.0);
+      const slotCenterV = 0.51 + t * 0.46;
+      const slotHalfWidth = 0.075 * Math.sin(t * Math.PI) + 0.028;
+      if (u > 0.09 && u < 0.54 && Math.abs(v - slotCenterV) < slotHalfWidth) {
+        return true;
+      }
+      // Small zenith gap at (0.50..0.57, 0.92..1.0)
+      if (u > 0.48 && u < 0.57 && v > 0.92) return true;
+      return false;
+    }
+
+    function buildFoliageLayer(tex, instances, alphaCutoff = 0.28) {
+      const planeGeo = new THREE.PlaneGeometry(1.0, 1.0, 2, 2);
+      const mat = createCanopyFoliageMaterial(tex, alphaCutoff);
+      const mesh = new THREE.InstancedMesh(planeGeo, mat, instances.length);
+      const colAttr = new Float32Array(instances.length * 3);
+      const phaseAttr = new Float32Array(instances.length);
+
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < instances.length; i++) {
+        const inst = instances[i];
+        dummy.position.copy(inst.pos);
+        // Face generally toward camera with natural 3D botanical tilt
+        dummy.lookAt(camPos.x + inst.tiltX, camPos.y + inst.tiltY, camPos.z + inst.tiltZ);
+        dummy.rotateZ(inst.rotZ);
+        dummy.scale.set(inst.scale, inst.scale, inst.scale);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+
+        colAttr[i * 3] = inst.color.r;
+        colAttr[i * 3 + 1] = inst.color.g;
+        colAttr[i * 3 + 2] = inst.color.b;
+        phaseAttr[i] = inst.phase;
+      }
+
+      planeGeo.setAttribute('aInstanceColor', new THREE.InstancedBufferAttribute(colAttr, 3));
+      planeGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phaseAttr, 1));
+      scene.add(mesh);
+      return mesh;
+    }
+    // Populate calibrated multi-layered canopy foliage instances
+    const mapleInstances = [];
+    const bambooSprayInstances = [];
+    const laceInstances = [];
+
+    function pushFoliageInstance(targetList, u, v, depth, scale, colHex, brightness = 1.0) {
+      const pos = screenPointToWorld3D(u, v, depth);
+      const col = new THREE.Color(colHex).multiplyScalar(brightness);
+      targetList.push({
+        pos,
+        scale,
+        rotZ: rand() * Math.PI * 2.0,
+        tiltX: (rand() - 0.5) * 4.5,
+        tiltY: (rand() - 0.5) * 4.5,
+        tiltZ: (rand() - 0.5) * 4.5,
+        color: col,
+        phase: rand() * Math.PI * 2.0
+      });
+    }
+
+    // A. Upper-Left Sunlit Deciduous Maple Canopy & Top-Center Golden-Lime Crown
+    for (let i = 0; i < 145; i++) {
+      const u = -0.05 + rand() * 0.43;
+      const v = 0.56 + rand() * 0.48;
+      if (isInsideSkyOpening(u, v) && rand() > 0.14) continue;
+      const depth = 6.8 + rand() * 5.2;
+      const scale = 2.0 + rand() * 1.9;
+      // Brighter lime-chartreuse near the sky channel, deeper emerald in the far top-left corner
+      const cornerDark = THREE.MathUtils.clamp((0.20 - u) * 3.0 + (v - 0.85) * 2.5, 0.0, 1.0);
+      const colHex = cornerDark > 0.55
+        ? (rand() > 0.4 ? 0x1e5c0f : 0x358416)
+        : (rand() > 0.45 ? 0x7ae226 : 0x58bf1b);
+      pushFoliageInstance(mapleInstances, u, v, depth, scale, colHex, 0.78 + rand() * 0.42);
+    }
+
+    // Bright sunlit lime crown right around the top convergence point (u=0.45..0.68, v=0.82..1.03)
+    for (let i = 0; i < 65; i++) {
+      const u = 0.44 + rand() * 0.25;
+      const v = 0.82 + rand() * 0.21;
+      if (u > 0.48 && u < 0.56 && v > 0.93 && rand() > 0.25) continue;
+      const depth = 11.5 + rand() * 6.5;
+      const scale = 2.4 + rand() * 2.2;
+      const isSunlitTop = v > 0.87 && u < 0.65;
+      const colHex = isSunlitTop ? (rand() > 0.4 ? 0x80e62b : 0x62c71d) : 0x245e13;
+      pushFoliageInstance(mapleInstances, u, v, depth, scale, colHex, 0.82 + rand() * 0.38);
+    }
+
+    // B. Feathery Bamboo Leaf Canopy Across Left Wall, Central Interior, Right Canopy & Understory
+    for (let i = 0; i < 420; i++) {
+      const u = -0.06 + rand() * 1.12;
+      const v = -0.04 + rand() * 1.08;
+      if (isInsideSkyOpening(u, v)) continue;
+
+      // Preserve small dappled sky openings on right, upper-right, and lower-center
+      const isRightSkyGap1 = (u > 0.65 && u < 0.72 && v > 0.55 && v < 0.64);
+      const isRightSkyGap2 = (u > 0.90 && u < 0.98 && v > 0.46 && v < 0.61);
+      const isTopRightGap = (u > 0.64 && u < 0.76 && v > 0.88 && v < 0.99);
+      const isBottomCenterGap = (u > 0.46 && u < 0.55 && v > 0.02 && v < 0.14);
+      if ((isRightSkyGap1 || isRightSkyGap2 || isTopRightGap || isBottomCenterGap) && rand() > 0.22) {
+        continue;
+      }
+
+      const depth = 7.5 + rand() * 10.5;
+      const scale = 2.1 + rand() * 2.3;
+
+      // Determine foliage lighting zone to match reference.jpg color distribution
+      let colHex = 0x1a4a12;
+      let bright = 0.65 + rand() * 0.35;
+
+      // Zone 1: Sunlit chartreuse border along the diagonal sky slot
+      const slotT = THREE.MathUtils.clamp((u - 0.08) / 0.46, 0.0, 1.0);
+      const distToSlot = Math.abs(v - (0.50 + slotT * 0.46));
+      if (u > 0.05 && u < 0.58 && distToSlot < 0.17) {
+        colHex = rand() > 0.42 ? 0x76de24 : 0x4eb319;
+        bright = 0.88 + rand() * 0.38;
+      }
+      // Zone 2: Deep dark emerald interior behind the center & right hero stalks (v in 0.48..0.82, u in 0.48..0.96)
+      else if (u > 0.48 && v > 0.46 && v < 0.84) {
+        colHex = rand() > 0.5 ? 0x0d290a : 0x173f11;
+        bright = 0.45 + rand() * 0.32;
+      }
+      // Zone 3: Lower-left dark emerald backdrop behind diagonal bamboo wall (u < 0.42, v < 0.46)
+      else if (u < 0.42 && v < 0.46) {
+        colHex = rand() > 0.45 ? 0x102e0c : 0x1f5215;
+        bright = 0.52 + rand() * 0.32;
+      }
+      // Zone 4: Warm golden-green backlit leaves filtering low in the center gap (u in 0.43..0.72, v < 0.42)
+      else if (u >= 0.42 && u <= 0.72 && v < 0.42) {
+        colHex = rand() > 0.45 ? 0x62c41d : 0x2e7014;
+        bright = 0.72 + rand() * 0.35;
+      }
+      // Zone 5: Lower-right dark shaded bamboo foliage (u > 0.72, v < 0.48)
+      else if (u > 0.72 && v < 0.48) {
+        colHex = rand() > 0.5 ? 0x0c2409 : 0x184212;
+        bright = 0.46 + rand() * 0.28;
+      }
+
+      pushFoliageInstance(bambooSprayInstances, u, v, depth, scale, colHex, bright);
+    }
+
+    // C. 360-Degree Surround Canopy Dome (for full immersion when orbiting away from initial view)
+    for (let i = 0; i < 160; i++) {
+      const ang = rand() * Math.PI * 2.0;
+      const rad = 5.0 + rand() * 12.0;
+      const y = 11.0 + rand() * 14.0;
+      // Avoid blocking the calibrated front-upward camera cone
+      const pos = new THREE.Vector3(camPos.x + Math.cos(ang) * rad, y, camPos.z + Math.sin(ang) * rad);
+      const toPos = pos.clone().sub(camPos).normalize();
+      if (toPos.dot(camForward) > 0.48) continue;
+
+      bambooSprayInstances.push({
+        pos,
+        scale: 3.0 + rand() * 2.5,
+        rotZ: rand() * Math.PI * 2.0,
+        tiltX: (rand() - 0.5) * 4.0,
+        tiltY: (rand() - 0.5) * 4.0,
+        tiltZ: (rand() - 0.5) * 4.0,
+        color: new THREE.Color().setHSL(0.29 + (rand() - 0.5) * 0.04, 0.68, 0.22 + rand() * 0.22),
+        phase: rand() * Math.PI * 2.0
+      });
+    }
+
+    // D. High-Frequency Botanical Lacework Silhouettes Around Sky Openings
+    for (let i = 0; i < 210; i++) {
+      const u = -0.02 + rand() * 1.04;
+      const v = 0.04 + rand() * 0.96;
+      if (isInsideSkyOpening(u, v) && rand() > 0.16) continue;
+      const depth = 9.0 + rand() * 8.0;
+      const scale = 1.55 + rand() * 1.45;
+      const isBrightEdge = isInsideSkyOpening(u + 0.04, v - 0.04) || isInsideSkyOpening(u - 0.04, v + 0.04);
+      const colHex = isBrightEdge ? 0x6cd622 : (v > 0.82 ? 0x4ca819 : 0x13380e);
+      pushFoliageInstance(laceInstances, u, v, depth, scale, colHex, isBrightEdge ? 0.95 : 0.62);
+    }
+
+    buildFoliageLayer(mapleLeafTex, mapleInstances, 0.26);
+    buildFoliageLayer(bambooLeafTex, bambooSprayInstances, 0.28);
+    buildFoliageLayer(canopyLaceTex, laceInstances, 0.30);
+
+    // 5. SUBTLE FLOATING ATMOSPHERIC POLLEN / MIST MOTES IN SUNLIT SHAFTS
+    const moteCount = 140;
+    const motePositions = new Float32Array(moteCount * 3);
+    const moteSeeds = new Float32Array(moteCount);
+    for (let i = 0; i < moteCount; i++) {
+      const u = 0.08 + rand() * 0.84;
+      const v = 0.05 + rand() * 0.88;
+      const depth = 2.2 + rand() * 9.5;
+      const p = screenPointToWorld3D(u, v, depth);
+      motePositions[i * 3] = p.x;
+      motePositions[i * 3 + 1] = p.y;
+      motePositions[i * 3 + 2] = p.z;
+      moteSeeds[i] = rand() * Math.PI * 2.0;
+    }
+    const moteGeo = new THREE.BufferGeometry();
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(motePositions, 3));
+    moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(moteSeeds, 1));
+    const moteMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: globalUniforms.uTime
+      },
+      vertexShader: /* glsl */`
+        attribute float aSeed;
+        uniform float uTime;
+        varying float vAlpha;
+        void main() {
+          vec3 p = position;
+          p.x += sin(uTime * 0.35 + aSeed) * 0.28;
+          p.y += mod(uTime * 0.08 + aSeed, 2.4) - 1.2;
+          p.z += cos(uTime * 0.29 + aSeed * 1.4) * 0.28;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = clamp(9.0 / -mv.z, 1.5, 4.5);
+          vAlpha = (0.18 + 0.16 * sin(uTime * 1.3 + aSeed * 3.0)) * smoothstep(1.2, 3.5, -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: /* glsl */`
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          float a = (1.0 - smoothstep(0.08, 0.5, d)) * vAlpha;
+          gl_FragColor = vec4(0.84, 0.98, 0.68, a);
+        }
+      `
+    });
+    const motePoints = new THREE.Points(moteGeo, moteMat);
+    scene.add(motePoints);
+
+    // -------------------------------------------------------------------------
+    // PART 5: CONTINUOUS ANIMATION LOOP & RESIZE HANDLER
+    // -------------------------------------------------------------------------
+    const clock = new THREE.Clock();
+
+    function onWindowResize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      bloomPass.resolution.set(w, h);
+    }
+    window.addEventListener('resize', onWindowResize);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      globalUniforms.uTime.value = elapsed;
+      gradePass.uniforms.uTime.value = elapsed;
+
+      // Subtle living sky/canopy breathing light modulation
+      const cloudShimmer = 1.0 + 0.045 * Math.sin(elapsed * 0.42) + 0.025 * Math.cos(elapsed * 0.87);
+      skySlotLight.intensity = 2.1 * cloudShimmer;
+      canopyBounceLight.intensity = 0.85 * (0.96 + 0.06 * Math.sin(elapsed * 0.65 + 1.0));
+
+      controls.update();
+      composer.render();
+    }
+
+    animate();
+  </script>
+</body>
+</html>
