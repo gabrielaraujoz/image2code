@@ -59,6 +59,8 @@ table.rubric tr.real td { background: rgba(232, 190, 63, .05); }
   <a href="#overview" data-id="overview"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M16 12h2"/><path d="M16 8h2"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/><path d="M6 12h2"/><path d="M6 8h2"/></svg><span>Overview</span></a>
   <span class="group">Samples</span>
   <span id="menu" style="display:contents"></span>
+  <span class="group">Evaluation</span>
+  <a href="#carbon" data-id="carbon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg><span>Carbon as judge</span></a>
   <a class="dl" href="https://github.com/willsertorio/image2code/releases/download/samples-v1/image2code-photorealistic-3d-samples.zip"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg><span>Download samples</span></a>
 </nav>
 <main class="main"><article class="doc" id="page"></article></main>
@@ -126,6 +128,39 @@ function renderOverview() {
     <h2>Results</h2>
     <p class="note">Each sample went through 3 review rounds before approval. The redesigns passed every rubric criterion, against 13 to 22 for Gemini. For Snowy Lighthouse, Gemini's first answer was a Blender Python script rather than HTML, so the prompt was run a second time. Each sample took about 15 hours of design time.</p>
     <div class="table-wrap"><table class="rubric plain"><thead><tr><th>Sample</th><th>Model</th><th>Redesign</th><th>Review rounds</th><th>Design time (est.)</th></tr></thead><tbody>${results}</tbody></table></div>`;
+}
+
+// Gemini 4 Carbon as judge: same rubric, code only, compared with the human review.
+const CARBON = {
+  scores: [
+    ['Moraine Lake', '13 / 32', '24 / 32', '32 / 32', '30 / 32', '80%'],
+    ['Bamboo Grove', '22 / 33', '19 / 33', '33 / 33', '26 / 33', '79%'],
+    ['Snowy Lighthouse', '21 / 33', '25 / 33', '33 / 33', '32 / 33', '86%']
+  ],
+  cats: [
+    ['Builds', 12, 12], ['Prompt Adherence', 12, 12], ['Composition', 11, 12], ['Lighting', 22, 24],
+    ['Motion', 25, 28], ['Realism', 19, 24], ['Reference Fidelity', 20, 26], ['Scene Fidelity', 23, 30],
+    ['Orbit', 4, 6], ['Materials', 12, 22]
+  ]
+};
+
+function renderCarbon() {
+  const scores = CARBON.scores.map(r => `<tr><td>${esc(r[0])}</td>${r.slice(1).map(v => `<td class="mono">${v}</td>`).join('')}</tr>`).join('');
+  const cats = CARBON.cats.map(([c, a, n]) => `<tr><td>${esc(c)}</td><td class="mono">${a} / ${n}</td><td class="mono">${Math.round(100 * a / n)}%</td></tr>`).join('');
+  page.className = 'doc';
+  page.innerHTML = `
+    <h1 class="home">Carbon as judge</h1>
+    <p class="lead">We ran the same rubrics through Gemini 4 Carbon as a judge. Carbon read the code of each scene, without running it, and scored every criterion pass or fail for both Gemini's answer and the redesign. It agreed with the human review on 160 of 196 criteria (82%).</p>
+    <h2>Scores</h2>
+    <div class="table-wrap"><table class="rubric plain"><thead><tr><th>Sample</th><th>Model · Human</th><th>Model · Carbon</th><th>Redesign · Human</th><th>Redesign · Carbon</th><th>Agreement</th></tr></thead><tbody>${scores}</tbody></table></div>
+    <h2>Agreement by category</h2>
+    <div class="table-wrap"><table class="rubric plain"><thead><tr><th>Category</th><th>Agree</th><th>%</th></tr></thead><tbody>${cats}</tbody></table></div>
+    <h2>Takeaways</h2>
+    <ul>
+      <li><strong>Reliable on what the code shows.</strong> Full agreement on builds and prompt adherence: it caught the extra UI in all three Gemini answers.</li>
+      <li><strong>Too lenient on Gemini's answers.</strong> It trusts what the code intends, not how it looks. It passed 19 criteria the human review failed, 11 of them on Moraine Lake, and caught only 23 of 42 human fails.</li>
+      <li><strong>Too strict on technique.</strong> It failed 17 criteria the human review passed, 7 of them on the Bamboo Grove redesign, which uses baked renders instead of 3D geometry. Materials is the weakest category, at 55%.</li>
+    </ul>`;
 }
 
 function pane(label, src) {
@@ -196,8 +231,8 @@ function renderSample(s) {
 function render() {
   const id = location.hash.slice(1);
   const s = SAMPLES.find(x => x.id === id);
-  document.querySelectorAll('.side a[data-id]').forEach(a => { if (a.dataset.id === (s ? s.id : 'overview')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  if (s) renderSample(s); else renderOverview();
+  document.querySelectorAll('.side a[data-id]').forEach(a => { if (a.dataset.id === (s ? s.id : id === 'carbon' ? 'carbon' : 'overview')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  if (s) renderSample(s); else if (id === 'carbon') renderCarbon(); else renderOverview();
   window.scrollTo(0, 0);
 }
 
