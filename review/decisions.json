@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "rows": {
+    "moraine:6": {
+      "mh": true,
+      "mhc": "There are white textures on the top of each mountain resembling snow."
+    },
+    "moraine:14": {
+      "removed": true
+    },
+    "moraine:18": {
+      "rhc": "There's no show of depth in the water, it looks opaque and just reflects the scene.",
+      "rh": false
+    },
+    "moraine:3": {
+      "removed": true
+    },
+    "moraine:4": {
+      "note": "esse fica, é uma boa rubrica e a discordancia é valida - a LLM analisa a cor de alguns pixels, nao necessariamente o contexto geral"
+    },
+    "moraine:5": {
+      "mhc": "The skyline is a row of peaks, but they are not jagged enough to match the photo's jagged profile.",
+      "note": "fica, interessante"
+    },
+    "moraine:9": {
+      "mh": true,
+      "mhc": "The peaks do have bumps that prevent them from looking like cones. There are ridges and gullies, and the texture helps to avoid the smoothness."
+    },
+    "moraine:19": {
+      "removed": true
+    },
+    "moraine:20": {
+      "mhc": "The snow is well positioned and reflects the light accordingly, being white and adapting to the sunset colors.",
+      "mh": true
+    },
+    "moraine:26": {
+      "note": "coisas que só se nota com robo, o que vale é a percepção humana"
+    },
+    "moraine:27": {
+      "note": "coisas que só se nota com robo, o que vale é a percepção humana"
+    },
+    "bamboo:G2": {
+      "rh": false,
+      "rhc": "The camera is stuck to a single point and has a very narrow angle of rotation, making it impossible to orbit around the scene properly."
+    },
+    "bamboo:6": {
+      "removed": true
+    },
+    "bamboo:11": {
+      "rh": false,
+      "rhc": "The canopy looks like an image that's being stretched and back to mimic movement, no real 3D."
+    },
+    "bamboo:12": {
+      "rhc": "The ground looks like uneven soil covered with dry bamboo leaves and small pebbles."
+    },
+    "bamboo:13": {
+      "mh": false,
+      "mhc": "The grove and fog continue in every direction, but they are finite. I can see a white-greenish background and the square where it's set when I zoom out."
+    },
+    "bamboo:15": {
+      "removed": true
+    },
+    "bamboo:18": {
+      "mh": false,
+      "mhc": "All stalks are the same shade of green and the only color variation is shadowing, without any yellowing or stains."
+    },
+    "bamboo:19": {
+      "rh": false,
+      "rhc": "Leaves do not read as translucent against the sky, they are just images with a white background.",
+      "mh": false
+    },
+    "bamboo:20": {
+      "removed": true
+    },
+    "bamboo:22": {
+      "mhc": "The canopy sways, and the movement looks natural."
+    },
+    "lighthouse:G2": {
+      "mhc": "Yes, you can orbit around the lighthouse. The polar limit keeps the camera above the ground. But if you drag/pan the scene then you're able to go underground and outside the scene.",
+      "mh": false
+    },
+    "lighthouse:8": {
+      "mh": true,
+      "mhc": "The tower is indeed octagonal, the lighting might make it seem a little rounded but its proportions match the photo."
+    },
+    "lighthouse:10": {
+      "mh": true,
+      "mhc": "The rocks are ",
+      "removed": true
+    },
+    "lighthouse:18": {
+      "mh": true,
+      "mhc": "I could notice a change in color on the rocks near the shoreline, as if they were wet. The snow reads as snow, and the rocks read as stone too."
+    },
+    "lighthouse:20": {
+      "removed": true
+    },
+    "lighthouse:29": {
+      "mh": false,
+      "mhc": "The foam does not follow the water line on the shore, and it has a weird movement when the water is pulling away. The water limit also looks like a hard clip."
+    },
+    "lighthouse:27": {
+      "mh": true,
+      "mhc": "No visible tile pattern is present in the ocean."
+    }
+  },
+  "updated": "2026-11-24T20:22:02.947Z"
+}

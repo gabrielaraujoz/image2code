@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisão Carbon Judge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Inter:opsz,wght@14..32,400..600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #E9EBF1; --card: #FFFFFF; --sunk: #F1F2F7; --line: #D7DBE5; --line2: #C3C9D8;
+    --ink: #131726; --text: #333950; --mute: #646B84; --faint: #8D94AB;
+    --brand: #2E1A8F; --accent: #4C2ED1; --accent-soft: #EBE6FB; --accent-line: #C9BCF7;
+    --ok: #0E7F59; --ok-bg: #E0F2E6; --bad: #B91C1C; --bad-bg: #FEF2F2; --bad-bd: #F3C4C4;
+    --warn: #A14400; --warn-bg: #FFF6E5; --chg: #5F3DED; --chg-bg: #F0ECFF;
+    --shadow: 0 1px 2px rgb(19 23 38 / 7%), 0 12px 30px -22px rgb(19 23 38 / 50%);
+    --stage: #0B0E18;
+    --display: Geist, Inter, system-ui, sans-serif;
+    --body: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --head-h: 60px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #090C18; --card: #12172A; --sunk: #0E1324; --line: #232A44; --line2: #323A5A;
+      --ink: #EDEFF6; --text: #C2C7D8; --mute: #8A92AC; --faint: #666E8A;
+      --brand: #B9A8FF; --accent: #A896FF; --accent-soft: #221C48; --accent-line: #3D3380;
+      --ok: #34D399; --ok-bg: #123027; --bad: #F87171; --bad-bg: #331A1C; --bad-bd: #5A2A2E;
+      --warn: #FBBF24; --warn-bg: #3E372C; --chg: #B9A8FF; --chg-bg: #221C48;
+      --shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 12px 30px -22px rgb(0 0 0 / 95%);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #090C18; --card: #12172A; --sunk: #0E1324; --line: #232A44; --line2: #323A5A;
+    --ink: #EDEFF6; --text: #C2C7D8; --mute: #8A92AC; --faint: #666E8A;
+    --brand: #B9A8FF; --accent: #A896FF; --accent-soft: #221C48; --accent-line: #3D3380;
+    --ok: #34D399; --ok-bg: #123027; --bad: #F87171; --bad-bg: #331A1C; --bad-bd: #5A2A2E;
+    --warn: #FBBF24; --warn-bg: #3E372C; --chg: #B9A8FF; --chg-bg: #221C48;
+    --shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 12px 30px -22px rgb(0 0 0 / 95%);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--ground); color: var(--text); font: 400 14.5px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; }
+  .mono { font-family: var(--mono); }
+  .eyebrow { font: 500 10.5px/1.3 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+
+  /* header */
+  header.top {
+    position: sticky; top: 0; z-index: 20; height: var(--head-h);
+    display: flex; align-items: center; gap: 18px; padding: 0 18px;
+    background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .wordmark { font: 700 18px/1 var(--display); color: var(--brand); letter-spacing: -.02em; }
+  .tabs { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; }
+  .tab {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--sunk); cursor: pointer; white-space: nowrap; text-align: left;
+  }
+  .tab .t-name { font: 600 13px/1.2 var(--display); color: var(--ink); }
+  .tab .t-pct { font: 500 11.5px/1.2 var(--mono); }
+  .tab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .tab.total { cursor: default; background: transparent; }
+  .pct-ok { color: var(--ok); } .pct-bad { color: var(--bad); }
+  .tools { display: flex; align-items: center; gap: 8px; }
+  .save { font: 500 11px/1.2 var(--mono); color: var(--mute); white-space: nowrap; }
+  .save.err { color: var(--warn); }
+  .btn {
+    border: 1px solid var(--line2); background: var(--card); border-radius: 7px; padding: 5px 10px; cursor: pointer;
+    font-size: 12.5px; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :root[data-theme="dark"] .btn.primary { color: #0B0E18; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0B0E18; } }
+  .btn.danger { color: var(--bad); }
+  .btn.sm { padding: 3px 8px; font-size: 12px; }
+
+  /* layout */
+  main.grid { max-width: 1180px; margin: 0 auto; padding: 16px; }
+  .sticky { position: sticky; top: var(--head-h); z-index: 10; background: var(--ground); padding: 10px 0; display: flex; flex-direction: column; gap: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; background: var(--card); }
+  .seg button { border: 0; background: transparent; padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line2); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shot { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .shot button.img { display: block; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--stage); cursor: zoom-in; aspect-ratio: 16 / 9; }
+  .shot button.img:hover { border-color: var(--accent); }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .shot figcaption { display: flex; align-items: center; gap: 6px; font: 500 10.5px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+  .shot figcaption a { margin-left: auto; letter-spacing: 0; text-transform: none; color: var(--accent); text-decoration: none; font-size: 11.5px; }
+  .lb { position: fixed; inset: 0; z-index: 50; background: rgb(5 7 14 / 92%); display: none; flex-direction: column; padding: 14px 16px; gap: 10px; }
+  .lb.open { display: flex; }
+  .lb-top { display: flex; align-items: center; gap: 10px; color: #EDEFF6; }
+  .lb-top .t { font: 600 14px/1.3 var(--display); flex: 1; min-width: 0; }
+  .lb-top .btn { background: #12172A; border-color: #323A5A; color: #EDEFF6; }
+  .lb-top .btn[aria-pressed="true"] { border-color: #A896FF; color: #A896FF; }
+  .lb-body { flex: 1; min-height: 0; display: grid; gap: 10px; }
+  .lb-body figure { margin: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+  .lb-body figcaption { font: 500 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #8A92AC; }
+  .lb-body img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
+
+  /* review column */
+  .col { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+  .summary { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .sum-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .sum-top h1 { margin: 0; font: 600 19px/1.2 var(--display); color: var(--ink); letter-spacing: -.02em; }
+  .big { font: 600 22px/1 var(--mono); }
+  .bar { position: relative; height: 8px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); overflow: visible; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--accent); }
+  .bar b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); left: 80%; }
+  .bar span { position: absolute; top: 10px; left: 80%; transform: translateX(-50%); font: 500 10px/1.2 var(--mono); color: var(--mute); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
+  .fact { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+  .fact .v { font: 600 14px/1.3 var(--mono); color: var(--ink); }
+  .fact .was { font: 400 11px/1.3 var(--mono); color: var(--faint); }
+  .warns { display: flex; flex-direction: column; gap: 4px; }
+  .warn { font-size: 12.5px; color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 5px 8px; }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { font-size: 12px; color: var(--mute); }
+  kbd { font: 500 11px/1 var(--mono); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 1px 4px; background: var(--card); }
+
+  .group { font: 600 11px/1.3 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); margin: 8px 2px -4px; }
+  .row { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; scroll-margin-top: calc(var(--head-h) + 16px); }
+  .row.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+  .row.removed { opacity: .62; }
+  .row.removed .sides, .row.removed .note, .row.removed .strip { display: none; }
+  .rbody { display: flex; flex-direction: column; gap: 10px; }
+  .needlive { color: var(--warn); }
+  .shot .frame { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--stage); aspect-ratio: 16 / 9; }
+  .shot .frame.live { border-color: var(--accent); }
+  .shot .frame button.img { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; aspect-ratio: auto; }
+  .shot .frame iframe, .lb-body iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--stage); }
+  .shot .frame iframe { position: absolute; inset: 0; }
+  .shot figcaption button { margin-left: auto; border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent); border-radius: 5px; padding: 1px 7px; font: 500 11px/1.4 var(--mono); cursor: pointer; letter-spacing: 0; text-transform: none; }
+  .shot figcaption a { margin-left: 6px; }
+  .lb-body iframe { flex: 1; min-height: 0; }
+  .rhead { display: flex; gap: 10px; align-items: flex-start; }
+  .rnum { font: 600 12px/1.6 var(--mono); color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; flex: none; }
+  .rnum.gate { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  .rtext { flex: 1; color: var(--ink); font-size: 14px; line-height: 1.45; }
+  .rtext .cat { display: block; font: 500 10.5px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); margin-bottom: 2px; }
+  .badge { font: 600 10.5px/1.6 var(--mono); letter-spacing: .06em; text-transform: uppercase; border-radius: 5px; padding: 0 6px; white-space: nowrap; }
+  .badge.dis { color: var(--bad); background: var(--bad-bg); }
+  .badge.ok { color: var(--ok); background: var(--ok-bg); }
+  .badge.chg { color: var(--chg); background: var(--chg-bg); }
+  .badge.rm { color: var(--mute); background: var(--sunk); border: 1px solid var(--line); }
+  .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .side { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px; background: var(--sunk); }
+  .side.dis { border-color: var(--bad-bd); background: var(--bad-bg); }
+  .side.changed { box-shadow: inset 3px 0 0 var(--chg); }
+  .shead { display: flex; align-items: center; gap: 6px; }
+  .shead .eyebrow { flex: 1; color: var(--ink); }
+  .verdicts { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; font-size: 12.5px; }
+  .verdicts .who { font: 500 10.5px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+  .pf { display: inline-flex; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; background: var(--card); width: max-content; }
+  .pf button { border: 0; background: transparent; padding: 2px 9px; cursor: pointer; font-size: 12.5px; }
+  .pf button + button { border-left: 1px solid var(--line2); }
+  .pf button.p[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+  .pf button.f[aria-pressed="true"] { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+  .cv { font-weight: 600; }
+  .cv.p { color: var(--ok); } .cv.f { color: var(--bad); }
+  .orig { font: 400 11px/1.3 var(--mono); color: var(--chg); margin-left: 6px; }
+  label.fl { font: 500 10.5px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); display: block; margin-bottom: 3px; }
+  textarea {
+    width: 100%; min-height: 54px; resize: vertical; border: 1px solid var(--line2); border-radius: 6px; background: var(--card);
+    color: var(--ink); font: 400 13px/1.45 var(--body); padding: 6px 8px;
+  }
+  textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea.edited { border-color: var(--chg); }
+  .ccomment { font-size: 12.5px; line-height: 1.45; color: var(--text); border-left: 2px solid var(--line2); padding-left: 8px; }
+  .ccomment.muted { color: var(--faint); }
+  .ractions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .note textarea { min-height: 36px; }
+  .empty { padding: 24px; text-align: center; color: var(--mute); }
+
+  @media (max-width: 640px) {
+    header.top { height: auto; flex-wrap: wrap; padding: 10px 16px; position: relative; }
+    main.grid { padding: 12px 16px; }
+    .sides { grid-template-columns: 1fr; }
+    .strip { grid-template-columns: 1fr; }
+    .sticky { position: static; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="wordmark">Revelo</span><span class="eyebrow">Image2Code · Carbon judge · revisão</span></div>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div class="tools">
+    <span class="save" id="save">—</span>
+    <button class="btn" id="export" title="Baixar decisions.json">Exportar</button>
+    <button class="btn" id="theme" title="Alternar tema">◐</button>
+  </div>
+</header>
+
+<main class="grid">
+  <section class="col">
+    <div class="card summary" id="summary"></div>
+    <div class="sticky"><div class="filters">
+      <div class="seg" id="filter">
+        <button data-v="dis" aria-pressed="true">Divergentes</button>
+        <button data-v="open" aria-pressed="false">Ainda divergentes</button>
+        <button data-v="chg" aria-pressed="false">Alterados</button>
+        <button data-v="all" aria-pressed="false">Todos</button>
+      </div>
+      <span class="hint"><kbd>j</kbd>/<kbd>k</kbd> navega · <kbd>1</kbd> inverte Model · <kbd>2</kbd> inverte Redesign · <kbd>x</kbd> remove · clique na imagem pra ampliar</span>
+    </div></div>
+    <div id="list" style="display:flex;flex-direction:column;gap:10px"></div>
+  </section>
+</main>
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Imagens ampliadas">
+  <div class="lb-top"><span class="t" id="lb-t"></span>
+    <button class="btn" data-lb="live" aria-pressed="false" title="Troca os prints de Model e Redesign pelas cenas rodando">▶ Ao vivo</button>
+    <button class="btn" data-lb="all" aria-pressed="false">As 3 lado a lado</button>
+    <button class="btn" data-lb="photo">Original</button><button class="btn" data-lb="model">Model</button><button class="btn" data-lb="redesign">Redesign</button>
+    <button class="btn" data-lb="close" title="Fechar (Esc)">✕</button></div>
+  <div class="lb-body" id="lb-body"></div>
+</div>
+
+<script>
+const SHOTS = [['photo', 'Original'], ['model', 'Model'], ['redesign', 'Redesign']];
+const LS_KEY = 'carbon-review-decisions';
+const state = { samples: [], dec: { version: 1, rows: {} }, sid: null, filter: 'dis', sel: null, server: true, lb: null };
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pct = (a, n) => n ? (100 * a / n) : 0;
+const fmtPct = v => v.toFixed(1).replace('.', ',') + '%';
+
+function readConst(src, name) {
+  const line = src.split('\n').find(l => l.startsWith(`const ${name} = `));
+  return JSON.parse(line.slice(`const ${name} = `.length).replace(/;\s*$/, ''));
+}
+
+/* ---------- data ---------- */
+const key = (sid, n) => `${sid}:${n}`;
+function eff(sid, r) {
+  const o = state.dec.rows[key(sid, r.n)] || {};
+  return {
+    ...r,
+    mh: 'mh' in o ? o.mh : r.mh, rh: 'rh' in o ? o.rh : r.rh,
+    mhc: 'mhc' in o ? o.mhc : r.mhc, rhc: 'rhc' in o ? o.rhc : r.rhc,
+    removed: !!o.removed, note: o.note || '',
+  };
+}
+function setDec(sid, n, patch) {
+  const k = key(sid, n);
+  const row = state.samples.find(s => s.id === sid).rows.find(r => r.n === n);
+  const cur = { ...(state.dec.rows[k] || {}), ...patch };
+  // drop fields equal to the original, so the file only holds real changes
+  for (const f of ['mh', 'rh', 'mhc', 'rhc']) if (f in cur && cur[f] === row[f]) delete cur[f];
+  if (!cur.removed) delete cur.removed;
+  if (!cur.note) delete cur.note;
+  if (Object.keys(cur).length) state.dec.rows[k] = cur; else delete state.dec.rows[k];
+  scheduleSave();
+}
+function stats(s, original = false) {
+  const rows = s.rows.map(r => original ? { ...r, removed: false } : eff(s.id, r)).filter(r => !r.removed);
+  const n = rows.length * 2;
+  const a = rows.reduce((k, r) => k + (r.mh === r.mc) + (r.rh === r.rc), 0);
+  return {
+    rows: rows.length, n, a, p: pct(a, n),
+    mh: rows.filter(r => r.mh).length, rh: rows.filter(r => r.rh).length,
+    mc: rows.filter(r => r.mc).length, rc: rows.filter(r => r.rc).length,
+    gateFails: rows.filter(r => r.n.startsWith('G') && !r.rh).map(r => r.n),
+  };
+}
+function changes(s) {
+  let flips = 0, removed = 0, comments = 0;
+  for (const r of s.rows) {
+    const o = state.dec.rows[key(s.id, r.n)]; if (!o) continue;
+    if (o.removed) { removed++; continue; }
+    flips += ('mh' in o) + ('rh' in o);
+    comments += ('mhc' in o) + ('rhc' in o);
+  }
+  return { flips, removed, comments };
+}
+
+/* ---------- save ---------- */
+let saveT = null;
+function scheduleSave() {
+  setSave('editando…');
+  clearTimeout(saveT);
+  saveT = setTimeout(save, 500);
+}
+async function save() {
+  state.dec.updated = new Date().toISOString();
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state.dec)); } catch (e) {}
+  if (!state.server) { setSave('salvo só no navegador', true); return; }
+  try {
+    const r = await fetch('save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.dec) });
+    if (!r.ok) throw new Error(r.status);
+    setSave('salvo em decisions.json · ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  } catch (e) {
+    state.server = false;
+    setSave('servidor fora: salvo só no navegador', true);
+  }
+}
+function setSave(t, err) { const el = $('#save'); el.textContent = t; el.classList.toggle('err', !!err); }
+
+/* ---------- header / summary ---------- */
+function renderTabs() {
+  const tot = state.samples.reduce((k, s) => { const x = stats(s); k.a += x.a; k.n += x.n; return k; }, { a: 0, n: 0 });
+  const totO = state.samples.reduce((k, s) => { const x = stats(s, true); k.a += x.a; k.n += x.n; return k; }, { a: 0, n: 0 });
+  $('#tabs').innerHTML = state.samples.map(s => {
+    const x = stats(s);
+    return `<button class="tab" role="tab" data-sid="${s.id}" aria-selected="${s.id === state.sid}">
+      <span class="t-name">${esc(s.name)}</span>
+      <span class="t-pct ${x.p >= 80 ? 'pct-ok' : 'pct-bad'}">${x.a}/${x.n} · ${fmtPct(x.p)}</span></button>`;
+  }).join('') + `<div class="tab total"><span class="t-name">Total</span>
+      <span class="t-pct ${pct(tot.a, tot.n) >= 80 ? 'pct-ok' : 'pct-bad'}">${tot.a}/${tot.n} · ${fmtPct(pct(tot.a, tot.n))}
+      <span style="color:var(--faint)">(era ${fmtPct(pct(totO.a, totO.n))})</span></span></div>`;
+}
+function renderSummary() {
+  const s = cur(), x = stats(s), o = stats(s, true), c = changes(s);
+  const warns = [];
+  if (x.rh < x.rows) warns.push(`O redesign deixa de passar em todos os critérios (${x.rh}/${x.rows}). O texto do Overview diz "passed every rubric criterion".`);
+  if (x.gateFails.length) warns.push(`Gate ${x.gateFails.join(', ')} falha no redesign: pela regra, gate falho volta pra retrabalho.`);
+  if (x.mh > o.mh) warns.push(`O Gemini sobe de ${o.mh} para ${x.mh} pass na revisão humana. O Overview cita "13 to 22 for Gemini".`);
+  $('#summary').innerHTML = `
+    <div class="sum-top"><h1>${esc(s.name)}</h1><span class="big ${x.p >= 80 ? 'pct-ok' : 'pct-bad'}">${fmtPct(x.p)}</span>
+      <span class="mono" style="color:var(--mute)">${x.a} de ${x.n} veredictos batem · ${x.rows} critérios × 2 lados</span></div>
+    <div class="bar" aria-label="Agreement ${fmtPct(x.p)}, meta 80%"><i style="width:${Math.min(100, x.p)}%"></i><b></b><span>meta 80%</span></div>
+    <div class="facts">
+      <div class="fact"><div class="eyebrow">Era</div><div class="v">${fmtPct(o.p)}</div><div class="was">${o.a}/${o.n}</div></div>
+      <div class="fact"><div class="eyebrow">Votos invertidos</div><div class="v">${c.flips}</div><div class="was">${c.comments} comentário(s) editado(s)</div></div>
+      <div class="fact"><div class="eyebrow">Critérios removidos</div><div class="v">${c.removed}</div><div class="was">de ${s.rows.length}</div></div>
+      <div class="fact"><div class="eyebrow">Model · humano</div><div class="v">${x.mh}/${x.rows}</div><div class="was">era ${o.mh}/${o.rows} · Carbon ${x.mc}</div></div>
+      <div class="fact"><div class="eyebrow">Redesign · humano</div><div class="v">${x.rh}/${x.rows}</div><div class="was">era ${o.rh}/${o.rows} · Carbon ${x.rc}</div></div>
+    </div>
+    ${warns.length ? `<div class="warns">${warns.map(w => `<div class="warn">${esc(w)}</div>`).join('')}</div>` : ''}`;
+}
+const cur = () => state.samples.find(s => s.id === state.sid);
+
+/* ---------- rows ---------- */
+function visibleRows() {
+  const s = cur();
+  return s.rows.filter(r => {
+    const e = eff(s.id, r);
+    const origDis = r.mh !== r.mc || r.rh !== r.rc;
+    const nowDis = !e.removed && (e.mh !== e.mc || e.rh !== e.rc);
+    const changed = !!state.dec.rows[key(s.id, r.n)];
+    if (state.filter === 'dis') return origDis || nowDis;
+    if (state.filter === 'open') return nowDis;
+    if (state.filter === 'chg') return changed;
+    return true;
+  });
+}
+function renderList() {
+  const s = cur(), rows = visibleRows();
+  if (!rows.length) { $('#list').innerHTML = `<div class="card empty">Nada neste filtro.</div>`; return; }
+  let last = null, html = '';
+  for (const r of rows) {
+    if (r.d !== last) { html += `<div class="group">${esc(r.d)}</div>`; last = r.d; }
+    html += `<article class="card row" id="row-${esc(r.n)}" data-n="${esc(r.n)}"></article>`;
+  }
+  $('#list').innerHTML = html;
+  rows.forEach(r => renderRow(r.n));
+  if (state.sel && !rows.some(r => r.n === state.sel)) state.sel = null;
+  markSel();
+}
+function sideHtml(side, label, e, orig) {
+  const h = e[side + 'h'], c = e[side + 'c'], hc = e[side + 'hc'], cc = e[side + 'cc'];
+  const oh = orig[side + 'h'];
+  const dis = h !== c, changed = h !== oh;
+  const cmEdited = hc !== orig[side + 'hc'];
+  return `<div class="side ${dis ? 'dis' : ''} ${changed ? 'changed' : ''}" data-side="${side}">
+    <div class="shead"><span class="eyebrow">${label}</span>
+      ${dis ? '<span class="badge dis">diverge</span>' : '<span class="badge ok">bate</span>'}
+      ${changed ? '<span class="badge chg">invertido</span>' : ''}</div>
+    <div class="verdicts">
+      <span class="who">Humano</span>
+      <span><span class="pf"><button class="p" data-act="set" data-v="1" aria-pressed="${h === true}">✓ Pass</button><button class="f" data-act="set" data-v="0" aria-pressed="${h === false}">✗ Fail</button></span>${changed ? `<span class="orig">original ${oh ? '✓' : '✗'}</span>` : ''}</span>
+      <span class="who">Carbon</span>
+      <span class="cv ${c ? 'p' : 'f'}">${c ? '✓ Pass' : '✗ Fail'}</span>
+    </div>
+    <div><label class="fl">Comentário humano${cmEdited ? ' · editado' : ''}</label>
+      <textarea data-act="hc" class="${cmEdited ? 'edited' : ''}" rows="2">${esc(hc)}</textarea></div>
+    <div><label class="fl">Carbon</label><div class="ccomment ${dis ? '' : 'muted'}">${esc(cc)}</div></div>
+    ${dis ? `<div class="ractions"><button class="btn sm" data-act="follow">Seguir o Carbon</button></div>` : ''}
+    ${changed || cmEdited ? `<div class="ractions"><button class="btn sm" data-act="restore">Restaurar original</button></div>` : ''}
+  </div>`;
+}
+function renderRow(n) {
+  const s = cur(), r = s.rows.find(x => x.n === n), e = eff(s.id, r);
+  const el = document.getElementById('row-' + n); if (!el) return;
+  el.classList.toggle('removed', e.removed);
+  if (!el.querySelector('.rbody')) el.innerHTML = stripHtml(s, r) + '<div class="rbody"></div>';
+  el.querySelector('.rbody').innerHTML = `
+    <div class="rhead"><span class="rnum ${r.n.startsWith('G') ? 'gate' : ''}">${esc(r.n)}</span>
+      <div class="rtext"><span class="cat">${esc(r.d)}${r.n.startsWith('G') ? ' · gate' : ''}${needsLive(r) ? ' · <span class="needlive">precisa ver ao vivo</span>' : ''}</span>${esc(r.c)}</div>
+      ${e.removed ? '<span class="badge rm">removido</span><button class="btn sm" data-act="unremove">Restaurar critério</button>'
+        : '<button class="btn sm danger" data-act="remove">Remover critério</button>'}</div>
+    <div class="sides">${sideHtml('m', 'Model (Gemini)', e, r)}${sideHtml('r', 'Redesign', e, r)}</div>
+    <div class="note"><label class="fl">Nota interna da decisão (opcional)</label><textarea data-act="note" rows="1">${esc(e.note)}</textarea></div>`;
+}
+function markSel() {
+  document.querySelectorAll('.row').forEach(el => el.classList.toggle('sel', el.dataset.n === state.sel));
+}
+function refreshStats() { renderTabs(); renderSummary(); }
+
+$('#list').addEventListener('click', ev => {
+  const rowEl = ev.target.closest('.row'); if (!rowEl) return;
+  const n = rowEl.dataset.n, s = cur(), r = s.rows.find(x => x.n === n);
+  if (state.sel !== n) { state.sel = n; markSel(); }
+  const b = ev.target.closest('button[data-act]'); if (!b) return;
+  if (b.dataset.act === 'zoom') { openLb(b.dataset.k, n); return; }
+  if (b.dataset.act === 'live') { toggleLive(b.closest('.shot')); return; }
+  const side = b.closest('.side')?.dataset.side;
+  const act = b.dataset.act;
+  if (act === 'set') setDec(s.id, n, { [side + 'h']: b.dataset.v === '1' });
+  else if (act === 'follow') setDec(s.id, n, { [side + 'h']: r[side + 'c'] });
+  else if (act === 'restore') { const o = { ...(state.dec.rows[key(s.id, n)] || {}) }; delete o[side + 'h']; delete o[side + 'hc']; state.dec.rows[key(s.id, n)] = o; setDec(s.id, n, {}); }
+  else if (act === 'remove') setDec(s.id, n, { removed: true });
+  else if (act === 'unremove') setDec(s.id, n, { removed: false });
+  renderRow(n); markSel(); refreshStats();
+});
+$('#list').addEventListener('input', ev => {
+  const t = ev.target; if (t.tagName !== 'TEXTAREA') return;
+  const rowEl = t.closest('.row'), n = rowEl.dataset.n, s = cur();
+  if (t.dataset.act === 'note') setDec(s.id, n, { note: t.value });
+  else if (t.dataset.act === 'hc') {
+    const side = t.closest('.side').dataset.side;
+    setDec(s.id, n, { [side + 'hc']: t.value });
+    const orig = s.rows.find(x => x.n === n)[side + 'hc'];
+    t.classList.toggle('edited', t.value !== orig);
+  }
+  refreshStats();
+});
+$('#list').addEventListener('focusin', ev => {
+  const rowEl = ev.target.closest('.row'); if (rowEl && state.sel !== rowEl.dataset.n) { state.sel = rowEl.dataset.n; markSel(); }
+});
+
+document.addEventListener('keydown', ev => {
+  if (state.lb) {
+    const order = ['photo', 'model', 'redesign'];
+    if (ev.key === 'Escape') closeLb();
+    else if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+      const i = order.indexOf(state.lb.k);
+      if (i >= 0) openLb(order[(i + (ev.key === 'ArrowRight' ? 1 : 2)) % 3], state.lb.n);
+    } else if (ev.key === 'a') openLb('all', state.lb.n);
+    else if (ev.key === 'v') openLb(state.lb.k, state.lb.n, !state.lb.live);
+    ev.preventDefault();
+    return;
+  }
+  if (ev.target.closest('textarea, input') || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const rows = [...document.querySelectorAll('.row')];
+  if (!rows.length) return;
+  const i = rows.findIndex(el => el.dataset.n === state.sel);
+  if (ev.key === 'j' || ev.key === 'k') {
+    const ni = ev.key === 'j' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
+    state.sel = rows[ni].dataset.n; markSel(); rows[ni].scrollIntoView({ block: 'start', behavior: 'smooth' }); ev.preventDefault();
+    return;
+  }
+  if (!state.sel) return;
+  const s = cur(), n = state.sel, e = eff(s.id, s.rows.find(x => x.n === n));
+  if (ev.key === '1' && !e.removed) setDec(s.id, n, { mh: !e.mh });
+  else if (ev.key === '2' && !e.removed) setDec(s.id, n, { rh: !e.rh });
+  else if (ev.key === 'x') setDec(s.id, n, { removed: !e.removed });
+  else return;
+  renderRow(n); markSel(); refreshStats();
+});
+
+/* ---------- images ---------- */
+function shotUrl(s, k) { return k === 'photo' ? '../' + s.ref : s.shots[k]; }
+function liveUrl(s, k) { return k === 'model' ? '../' + s.model : k === 'redesign' ? '../' + s.redesign : '../' + s.ref; }
+const LIVE_RE = /orbit|drift|sway|flicker|pop-in|loop|moves?\b|motion|wind|ripple|falling|waves?\b|edge|horizon with no/i;
+function needsLive(r) { return r.d === 'Motion' || r.d === 'Orbit' || LIVE_RE.test(r.c); }
+function imgHtml(s, k, l) {
+  return `<button class="img" data-act="zoom" data-k="${k}" aria-label="Ampliar ${l}"><img src="${esc(shotUrl(s, k))}" alt="${l}" loading="lazy"></button>`;
+}
+function stripHtml(s, r) {
+  return `<div class="strip">${SHOTS.map(([k, l]) => `<figure class="shot" data-k="${k}">
+    <div class="frame">${imgHtml(s, k, l)}</div>
+    <figcaption>${l}${k === 'redesign' && s.redesignIsRender ? ' · render Blender' : ''}${k === 'photo' ? '' : `<button data-act="live" data-k="${k}" title="Roda a cena aqui, pra orbitar e ver o movimento">▶ ao vivo</button><a href="${esc(liveUrl(s, k))}" target="_blank" rel="noopener" title="Abre numa aba nova">↗</a>`}</figcaption></figure>`).join('')}</div>`;
+}
+// One live scene per side at a time across the list, to keep the GPU sane.
+function stopLive(fig) {
+  const frame = fig.querySelector('.frame'), k = fig.dataset.k, s = cur();
+  frame.classList.remove('live');
+  frame.innerHTML = imgHtml(s, k, SHOTS.find(x => x[0] === k)[1]);
+  const b = fig.querySelector('button[data-act="live"]'); if (b) b.textContent = '▶ ao vivo';
+}
+function toggleLive(fig) {
+  const frame = fig.querySelector('.frame'), k = fig.dataset.k, s = cur();
+  if (frame.classList.contains('live')) { stopLive(fig); return; }
+  document.querySelectorAll(`.shot[data-k="${k}"] .frame.live`).forEach(f => stopLive(f.closest('.shot')));
+  frame.classList.add('live');
+  frame.innerHTML = `<iframe src="${esc(liveUrl(s, k))}" title="${k} ao vivo" allow="fullscreen"></iframe>`;
+  fig.querySelector('button[data-act="live"]').textContent = '■ parar';
+}
+function openLb(k, n, live) {
+  if (live === undefined) live = state.lb ? state.lb.live : false;
+  // stop inline scenes while the big view runs its own
+  if (live) document.querySelectorAll('.shot .frame.live').forEach(f => stopLive(f.closest('.shot')));
+  state.lb = { k, n, live };
+  const s = cur(), r = s.rows.find(x => x.n === n);
+  $('#lb-t').textContent = r ? `${r.n} · ${r.c}` : s.name;
+  const items = k === 'all' ? SHOTS : SHOTS.filter(x => x[0] === k);
+  const body = $('#lb-body');
+  body.style.gridTemplateColumns = k === 'all' ? 'repeat(3, 1fr)' : '1fr';
+  body.innerHTML = items.map(([kk, l]) => `<figure><figcaption>${l}${live && kk !== 'photo' ? ' · ao vivo' : ''}</figcaption>${live && kk !== 'photo'
+    ? `<iframe src="${esc(liveUrl(s, kk))}" title="${l} ao vivo" allow="fullscreen"></iframe>`
+    : `<img src="${esc(shotUrl(s, kk))}" alt="${l}">`}</figure>`).join('');
+  document.querySelectorAll('#lb [data-lb]').forEach(b => {
+    if (b.dataset.lb === 'live') b.setAttribute('aria-pressed', !!live);
+    else if (b.dataset.lb !== 'close') b.setAttribute('aria-pressed', b.dataset.lb === k);
+  });
+  $('#lb').classList.add('open');
+}
+function closeLb() { $('#lb').classList.remove('open'); $('#lb-body').innerHTML = ''; state.lb = null; }
+$('#lb').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-lb]');
+  if (b) {
+    if (b.dataset.lb === 'close') closeLb();
+    else if (b.dataset.lb === 'live') openLb(state.lb.k, state.lb.n, !state.lb.live);
+    else openLb(b.dataset.lb, state.lb.n);
+    return;
+  }
+  if (ev.target.id === 'lb' || ev.target.id === 'lb-body') closeLb();
+});
+
+/* ---------- misc ---------- */
+$('#tabs').addEventListener('click', ev => {
+  const b = ev.target.closest('.tab[data-sid]'); if (!b || b.dataset.sid === state.sid) return;
+  selectSample(b.dataset.sid);
+});
+$('#filter').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  state.filter = b.dataset.v;
+  $('#filter').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  renderList();
+});
+$('#export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state.dec, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'decisions.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#theme').addEventListener('click', () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('carbon-review-theme', r.dataset.theme); } catch (e) {}
+});
+function selectSample(sid) {
+  state.sid = sid; state.sel = null;
+  try { localStorage.setItem('carbon-review-sample', sid); } catch (e) {}
+  renderTabs(); renderSummary(); renderList();
+  window.scrollTo(0, 0);
+}
+
+async function init() {
+  try { const t = localStorage.getItem('carbon-review-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  // baseline.json holds the rubrics as they were before this review; index.html already has the decisions applied.
+  const base = await (await fetch('baseline.json', { cache: 'no-store' })).json();
+  const S = base.SAMPLES, C = base.CARBON_RUBRICS;
+  state.samples = C.map(c => { const s = S.find(x => x.id === c.id); return { id: c.id, name: c.name, rows: c.rows, ref: s.ref, render: s.render, model: s.model, redesign: s.redesign,
+    shots: { model: `shots/${c.id}_model.jpg`, redesign: `shots/${c.id}_redesign.jpg` } }; });
+  // fall back to the Blender render when the redesign screenshot is missing
+  await Promise.all(state.samples.map(async s => {
+    const r = await fetch(s.shots.redesign, { method: 'HEAD' }).catch(() => null);
+    if (!r || !r.ok) { s.shots.redesign = '../' + s.render; s.redesignIsRender = true; }
+  }));
+
+  let loaded = null;
+  try { const r = await fetch('decisions.json', { cache: 'no-store' }); if (r.ok) loaded = await r.json(); } catch (e) {}
+  if (!loaded) { try { loaded = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {} }
+  if (loaded && loaded.rows) state.dec = loaded;
+  try { const r = await fetch('save', { method: 'HEAD' }); state.server = r.status !== 404 || location.protocol !== 'file:'; } catch (e) { state.server = false; }
+  setSave(loaded ? 'decisões carregadas' : 'nenhuma decisão ainda');
+
+  let sid = state.samples[0].id;
+  try { const v = localStorage.getItem('carbon-review-sample'); if (state.samples.some(s => s.id === v)) sid = v; } catch (e) {}
+  state.sid = sid;
+  selectSample(sid);
+}
+init().catch(err => {
+  document.body.innerHTML = `<div style="padding:24px;font-family:var(--body)"><h2>Não deu pra carregar</h2><p>Rode <code>python3 review/server.py</code> na raiz do repo e abra <code>http://127.0.0.1:8765/review/</code>.</p><pre>${esc(err.stack || err)}</pre></div>`;
+});
+</script>
+</body>
+</html>
